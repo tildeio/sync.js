@@ -6,6 +6,32 @@ define("sync",
     __exports__.ohai = ohai;
   });
 
+define("sync/lifecycle",
+  ["sync/operation","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var applyToCanonical = __dependency1__.applyToCanonical;
+
+    function saving(ref) {
+      if (ref.inFlight.length !== 0) {
+        throw new Error("You can't save a reference's buffer if has un-acknowledged in-flight operations");
+      }
+
+      ref.inFlight = ref.buffer.slice();
+      ref.buffer = [];
+    }
+
+    function saved(ref) {
+      ref.inFlight.forEach(function(op) {
+        applyToCanonical(ref, op);
+      });
+
+      ref.inFlight = [];
+    }
+    __exports__.saving = saving;
+    __exports__.saved = saved;
+  });
+
 define("sync/operation",
   ["exports"],
   function(__exports__) {
@@ -26,6 +52,24 @@ define("sync/operation",
     __exports__.applyToBuffer = applyToBuffer;
   });
 
+define("sync/operations/set_property",
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    function SetProperty(property, oldValue, newValue) {
+      this.property = property;
+      this.oldValue = oldValue;
+      this.newValue = newValue;
+    }
+
+    SetProperty.prototype = {
+      apply: function(hash) {
+        hash[this.property] = this.newValue;
+      }
+    };
+    __exports__.SetProperty = SetProperty;
+  });
+
 define("sync/reference",
   ["exports"],
   function(__exports__) {
@@ -36,6 +80,7 @@ define("sync/reference",
         id: id,
 
         canonical: {},
+        inFlight: [],
         buffer: []
       }
     }
@@ -44,16 +89,29 @@ define("sync/reference",
       return reference.canonical;
     }
 
-    function buffer(reference) {
-      var buffer = Object.create(reference.canonical);
+    function inFlight(reference) {
+      var snapshot = Object.create(reference.canonical);
 
-      reference.buffer.forEach(function(operation) {
-        operation.apply(buffer);
+      reference.inFlight.forEach(function(operation) {
+        operation.apply(snapshot);
       });
 
-      return buffer;
+      return snapshot;
     }
+
+    function buffer(reference) {
+      var snapshot = inFlight(reference);
+
+      reference.buffer.forEach(function(operation) {
+        operation.apply(snapshot);
+      });
+
+      return snapshot;
+    }
+
+
     __exports__.reference = reference;
     __exports__.canonical = canonical;
+    __exports__.inFlight = inFlight;
     __exports__.buffer = buffer;
   });

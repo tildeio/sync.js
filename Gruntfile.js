@@ -38,7 +38,7 @@ module.exports = function(grunt) {
           format: 'amd'
         },
 
-        src: ["lib/sync.js", "lib/*/*.js"],
+        src: ["lib/sync.js", "lib/*/**/*.js"],
         dest: "tmp/sync.amd.js"
       },
 
@@ -48,7 +48,7 @@ module.exports = function(grunt) {
           format: 'amd'
         },
 
-        src: ['test/test_helpers.js', 'test/tests.js', 'test/tests/*_test.js'],
+        src: ['test/test_helpers.js', 'test/tests.js', 'test/tests/**/*_test.js'],
         dest: 'tmp/tests.amd.js'
       }
     },
