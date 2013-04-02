@@ -23,7 +23,7 @@ define("sync/lifecycle",
 
     function saved(ref) {
       ref.inFlight.forEach(function(op) {
-        applyToCanonical(ref, op);
+        op.apply(ref.canonical);
       });
 
       ref.inFlight = [];
@@ -43,6 +43,16 @@ define("sync/operation",
 
     function applyToCanonical(reference, operation) {
       operation.apply(reference.canonical);
+
+      reference.inFlight.forEach(function(inFlightOp) {
+        transform(operation, inFlightOp);
+      });
+    }
+
+    function transform(op1, op2) {
+      if (op1.isCompatible(op2)) {
+        op2.transform(op1);
+      }
     }
 
     function applyToBuffer(reference, operation) {
@@ -63,8 +73,18 @@ define("sync/operations/set_property",
     }
 
     SetProperty.prototype = {
+      constructor: SetProperty,
+
       apply: function(hash) {
         hash[this.property] = this.newValue;
+      },
+
+      isCompatible: function(other) {
+        return other instanceof SetProperty && this.property === other.property;
+      },
+
+      transform: function(prev) {
+        this.oldValue = prev.newValue;
       }
     };
     __exports__.SetProperty = SetProperty;
