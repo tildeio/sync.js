@@ -1,4 +1,7 @@
 module.exports = function(grunt) {
+  var name = 'sync.js';
+  var barename = 'sync';
+
   // Alias tasks for the most common sets of tasks.
   // Most of the time, you will use these.
 
@@ -7,9 +10,9 @@ module.exports = function(grunt) {
   this.registerTask('default', ['build']);
 
   // Build a new version of the library
-  this.registerTask('build', "Builds a distributable version of sync.js", ['clean', 'transpile:amd', 'concat:sync', 'concat:browser', 'browser:dist']);
+  this.registerTask('build', "Builds a distributable version of " + name, ['clean', 'transpile:amd', 'concat:library', 'concat:browser', 'browser:dist']);
 
-  this.registerTask('tests', "Builds the test package", ['build', 'transpile:tests', 'buildTests:dist']);
+  this.registerTask('tests', "Builds the test package", ['build', 'concat:deps', 'transpile:tests', 'buildTests:dist']);
 
   // Run a server. This is ideal for running the QUnit tests in the browser.
   this.registerTask('server', ['build', 'tests', 'connect', 'watch']);
@@ -34,17 +37,17 @@ module.exports = function(grunt) {
     transpile: {
       amd: {
         options: {
-          name: 'sync',
+          name: barename,
           format: 'amd'
         },
 
-        src: ["lib/sync.js", "lib/*/**/*.js"],
-        dest: "tmp/sync.amd.js"
+        src: ["lib/" + barename + ".js", "lib/*/**/*.js"],
+        dest: "tmp/" + barename + ".amd.js"
       },
 
       tests: {
         options: {
-          name: 'sync',
+          name: barename,
           format: 'amd'
         },
 
@@ -56,27 +59,32 @@ module.exports = function(grunt) {
     clean: ["dist"],
 
     concat: {
-      sync: {
-        src: ['tmp/sync.amd.js'],
+      library: {
+        src: ['tmp/' + barename + '.amd.js'],
         dest: 'dist/<%= pkg.name %>-<%= pkg.version %>.amd.js'
       },
 
+      deps: {
+        src: ['vendor/deps/*.js'],
+        dest: 'tmp/deps.amd.js'
+      },
+
       browser: {
-        src: ['vendor/loader.js', 'tmp/sync.amd.js'],
-        dest: 'tmp/sync.browser1.js'
+        src: ['vendor/loader.js', 'tmp/' + barename + '.amd.js'],
+        dest: 'tmp/' + barename + '.browser1.js'
       }
     },
 
     browser: {
       dist: {
-        src: 'tmp/sync.browser1.js',
+        src: 'tmp/' + barename + '.browser1.js',
         dest: 'dist/<%= pkg.name %>-<%= pkg.version %>.js'
       }
     },
 
     buildTests: {
       dist: {
-        src: ['vendor/loader.js', 'tmp/tests.amd.js', 'tmp/sync.amd.js'],
+        src: ['vendor/loader.js', 'tmp/tests.amd.js', 'tmp/deps.amd.js', 'tmp/' + barename + '.amd.js'],
         dest: 'tmp/tests.js'
       }
     }
@@ -90,14 +98,14 @@ module.exports = function(grunt) {
 
   // Multi-task for wrapping browser version
 
-  this.registerMultiTask('browser', "Export the object in sync.js to the window", function() {
+  this.registerMultiTask('browser', "Export the object in " + name + " to the window", function() {
     this.files.forEach(function(f) {
       var output = ["(function(globals) {"];
 
       output.push.apply(output, f.src.map(grunt.file.read));
 
-      output.push('window.sync = requireModule("sync");')
-      output.push('})(window);')
+      output.push('window.' + barename + ' = requireModule("' + barename + '");');
+      output.push('})(window);');
 
       grunt.file.write(f.dest, output.join("\n"));
     });
@@ -116,7 +124,7 @@ module.exports = function(grunt) {
         output.push('requireModule("' + nameFor(file) + '");');
       });
 
-      output.push('})(window);')
+      output.push('})(window);');
 
       grunt.file.write(f.dest, output.join("\n"));
     });
