@@ -62,7 +62,7 @@ module.exports = function(grunt) {
       },
 
       browser: {
-        src: ['lib/loader.js', 'tmp/sync.amd.js'],
+        src: ['vendor/loader.js', 'tmp/sync.amd.js'],
         dest: 'tmp/sync.browser1.js'
       }
     },
@@ -76,7 +76,7 @@ module.exports = function(grunt) {
 
     buildTests: {
       dist: {
-        src: ['lib/loader.js', 'tmp/tests.amd.js', 'tmp/sync.amd.js'],
+        src: ['vendor/loader.js', 'tmp/tests.amd.js', 'tmp/sync.amd.js'],
         dest: 'tmp/tests.js'
       }
     }
