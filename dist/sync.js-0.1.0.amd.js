@@ -22,6 +22,10 @@ define("sync/lifecycle",
 
       ref.inFlight = ref.buffer.slice();
       ref.buffer = [];
+
+      ref.trigger('lifecycle:saving');
+      // don't fire buffer:change because moving the buffer to in-flight
+      // does not affect the buffer snapshot
     }
 
     function saved(ref) {
@@ -30,15 +34,20 @@ define("sync/lifecycle",
       });
 
       ref.inFlight = [];
+
+      ref.trigger('lifecycle:saved');
+      ref.trigger('canonical:change');
     }
     __exports__.saving = saving;
     __exports__.saved = saved;
   });
 
 define("sync/operation",
-  ["exports"],
-  function(__exports__) {
+  ["sync/reference","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
+    var buffer = __dependency1__.buffer;
+
     // operation
     // - isNoop
     // - test
@@ -47,19 +56,46 @@ define("sync/operation",
     function applyToCanonical(reference, operation) {
       operation.apply(reference.canonical);
 
+      var transformed;
+
       reference.inFlight.forEach(function(inFlightOp) {
-        transform(operation, inFlightOp);
+        transformed = transform(operation, inFlightOp);
       });
+
+      if (!transformed) {
+        reference.buffer.forEach(function(bufferedOp) {
+          transformed = transform(operation, bufferedOp);
+        });
+      }
+
+      reference.trigger('canonical:change');
+
+      if (!transformed) {
+        reference.trigger('buffer:change');
+      } else {
+        reference.trigger('buffer:transformed');
+      }
     }
 
     function transform(op1, op2) {
       if (op1.isCompatible(op2)) {
         op2.transform(op1);
+        return true;
       }
+
+      return false;
     }
 
     function applyToBuffer(reference, operation) {
+      var prev = buffer(reference);
+
+      if (operation.test && !operation.test(prev)) {
+        throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
+      }
+
       reference.buffer.push(operation);
+
+      reference.trigger('buffer:change');
     }
     __exports__.applyToCanonical = applyToCanonical;
     __exports__.applyToBuffer = applyToBuffer;
@@ -78,6 +114,10 @@ define("sync/operations/set_property",
     SetProperty.prototype = {
       constructor: SetProperty,
 
+      toString: function() {
+        return "Set[" + this.property + " " + this.oldValue + "->" + this.newValue + "]";
+      },
+
       apply: function(hash) {
         hash[this.property] = this.newValue;
       },
@@ -88,24 +128,43 @@ define("sync/operations/set_property",
 
       transform: function(prev) {
         this.oldValue = prev.newValue;
+      },
+
+      test: function(current) {
+        // The null precondition is satisfied with either null or undefined
+        if (this.oldValue === null) {
+          return current[this.property] == this.oldValue;
+        } else {
+          return current[this.property] === this.oldValue;
+        }
       }
     };
     __exports__.SetProperty = SetProperty;
   });
 
 define("sync/reference",
-  ["exports"],
-  function(__exports__) {
+  ["rsvp/events","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
-    function reference(type, id) {
-    	return {
-        type: type,
-        id: id,
+    var EventTarget = __dependency1__.EventTarget;
 
-        canonical: {},
-        inFlight: [],
-        buffer: []
-      }
+    function Reference(type, id) {
+      this.type = type;
+      this.id = id;
+
+      this.canonical = {};
+      this.inFlight = [];
+      this.buffer = [];
+    }
+
+    Reference.prototype = {
+      constructor: Reference
+    };
+
+    EventTarget.mixin(Reference.prototype);
+
+    function reference(type, id) {
+      return new Reference(type, id);
     }
 
     function canonical(reference) {
@@ -131,8 +190,6 @@ define("sync/reference",
 
       return snapshot;
     }
-
-
     __exports__.reference = reference;
     __exports__.canonical = canonical;
     __exports__.inFlight = inFlight;

@@ -52,6 +52,11 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
   operation = {
     apply: function(hash) {
       hash.firstName = 'Thomas'
+    },
+
+    // don't try to transform the existing operation
+    isCompatible: function(op2) {
+      return false;
     }
   };
 
@@ -60,6 +65,11 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
   operation = {
     apply: function(hash) {
       hash.lastName = 'Dayl'
+    },
+
+    // don't try to transform the existing operation
+    isCompatible: function() {
+      return false;
     }
   };
 
@@ -67,4 +77,20 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
 
   deepEqual(canonical(ref), { firstName: 'Thomas', lastName: 'Dayl' });
   deepEqual(buffer(ref), { firstName: 'Thomas', lastName: 'Dale' });
+});
+
+test("applyToBuffer throws if the operation does not pass its test", function() {
+  var operation = {
+    apply: function(hash) {
+      hash.lastName = 'Dale';
+    },
+
+    test: function(prev) {
+      return prev.lastName === 'Dayl';
+    }
+  };
+
+  throws(function() {
+    applyToBuffer(ref, operation);
+  });
 });

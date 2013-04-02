@@ -54,7 +54,7 @@ module("Lifecycle", {
     The in-flight snapshot is `{ firstName: 'Tom' lastName: 'Dale' }`
     The buffered snapshot is `{ firstName: 'Tom', lastName: 'Dale' }`
 */
-test("Buffered operations can be moved to in-flight", function() {
+test("Scenario 1 (See Comment)", function() {
   var op1 = new SetProperty('lastName', null, 'Dale');
 
   applyToBuffer(ref, op1);
@@ -91,6 +91,48 @@ test("Buffered operations can be moved to in-flight", function() {
   deepEqual(canonical(ref), { firstName: 'Thomas', lastName: 'Dale' }, "The received operation is applied to the canonical");
   deepEqual(inFlight(ref), { firstName: 'Tom', lastName: 'Dale' }, "The in-flight snapshot reflects the change");
   deepEqual(buffer(ref), { firstName: 'Tom', lastName: 'Dale' }, "The buffer reflects the change");
+});
+
+/**
+  Scenario:
+
+  Setup:
+    Create a fresh reference
+
+  Step 1:
+    Apply Set[firstName, null->Tom] to the buffer
+    Apply Set[firstName, null->Thomas] to the canonical
+  Test:
+    The canonical snapshot is `{ firstName: 'Thomas' }`
+    The buffered snapshot is `{ firstName: 'Tom' }`
+*/
+test("Scenario 2 (See Comment)", function() {
+  applyToBuffer(ref, new SetProperty('firstName', null, 'Tom'));
+  applyToCanonical(ref, new SetProperty('firstName', null, 'Thomas'));
+
+  // Note that this works, because the buffered operation was transformed
+  // to have the canonical value as its oldValue, which allows its
+  // precondition to pass.
+
+  deepEqual(canonical(ref), { firstName: 'Thomas' });
+  deepEqual(buffer(ref), { firstName: 'Tom' });
+});
+
+/**
+  Scenario:
+
+  Setup:
+    Create a fresh reference
+
+  Step 1:
+    Apply Set[firstName, Tom->Thomas] to the buffer
+  Test:
+    Step 1 throws
+*/
+test("Scenario 3 (See Comment)", function() {
+  throws(function() {
+    applyToBuffer(ref, new SetProperty('firstName', 'Tom', 'Thomas'));
+  });
 });
 
 test("The saving() function throws if the reference has no operations", function() {
