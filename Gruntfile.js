@@ -10,7 +10,7 @@ module.exports = function(grunt) {
   this.registerTask('default', ['build']);
 
   // Build a new version of the library
-  this.registerTask('build', "Builds a distributable version of " + name, ['clean', 'transpile:amd', 'concat:library', 'concat:browser', 'browser:dist']);
+  this.registerTask('build', "Builds a distributable version of " + name, ['clean', 'transpile:amd', 'concat:library', 'concat:browser', 'browser:dist', 'bytes']);
 
   this.registerTask('tests', "Builds the test package", ['build', 'concat:deps', 'transpile:tests', 'buildTests:dist']);
 
@@ -97,6 +97,10 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-watch');
 
   // Multi-task for wrapping browser version
+
+  this.registerTask('bytes', function() {
+    console.log("TODO: Add a bytes-tracking task");
+  });
 
   this.registerMultiTask('browser', "Export the object in " + name + " to the window", function() {
     this.files.forEach(function(f) {
