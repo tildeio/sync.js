@@ -118,5 +118,3 @@ test("When a canonical is modified for a property without an operation in the bu
 
   firedEvents('canonical:change', 'buffer:change');
 });
-
-// TODO: Noop operations

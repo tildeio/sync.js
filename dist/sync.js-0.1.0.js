@@ -84,25 +84,37 @@ define("sync/operation",
   function(__dependency1__, __exports__) {
     "use strict";
     var buffer = __dependency1__.buffer;
+    /**
+      Note: This file is implemented in an extremely naïve way. At the moment,
+      it simply iterates through operations to find transformable or composable
+      operations, and sync/reference simply replays the operations every time
+      a snapshot is requested.
 
-    // operation
-    // - isNoop
-    // - test
-    // - apply
+      Once the semantics are clearly defined, this should be changed to use
+      a more optimized path for each operation (e.g. we could implement
+      the composition of all SetProperty operations as a dictionary of
+      property->op).
+    */
+
 
     function applyToCanonical(reference, operation) {
       operation.apply(reference.canonical);
 
-      var transformed;
+      var transformed, remove;
 
-      reference.inFlight.forEach(function(inFlightOp) {
+      reference.inFlight.some(function(inFlightOp) {
         transformed = transform(operation, inFlightOp);
       });
 
       if (!transformed) {
-        reference.buffer.forEach(function(bufferedOp) {
+        reference.buffer.some(function(bufferedOp, i) {
           transformed = transform(operation, bufferedOp);
+          if (transformed === 'noop') { remove = i; }
         });
+
+        if (remove !== undefined) {
+          reference.buffer.splice(remove, 1);
+        }
       }
 
       reference.trigger('canonical:change');
@@ -117,6 +129,17 @@ define("sync/operation",
     function transform(op1, op2) {
       if (op1.isCompatible(op2)) {
         op2.transform(op1);
+        if (op2.noop()) { return 'noop'; }
+        return true;
+      }
+
+      return false;
+    }
+
+    function compose(op1, op2) {
+      if (op1.isCompatible(op2)) {
+        var composed = op1.compose(op2);
+        if (op1.noop()) { return 'noop'; }
         return true;
       }
 
@@ -130,7 +153,23 @@ define("sync/operation",
         throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
       }
 
-      reference.buffer.push(operation);
+      var composed, remove;
+
+      reference.buffer.some(function(bufferedOp, i) {
+        composed = compose(bufferedOp, operation);
+        if (composed === 'noop') {
+          remove = i;
+          return true;
+        }
+
+        return !composed;
+      });
+
+      if (remove !== undefined) {
+        reference.buffer.splice(remove, 1);
+      } else if (!composed) {
+        reference.buffer.push(operation);
+      }
 
       reference.trigger('buffer:change');
     }
@@ -165,6 +204,14 @@ define("sync/operations/set_property",
 
       transform: function(prev) {
         this.oldValue = prev.newValue;
+      },
+
+      compose: function(next) {
+        this.newValue = next.newValue;
+      },
+
+      noop: function() {
+        return this.oldValue === this.newValue;
       },
 
       test: function(current) {
@@ -227,10 +274,20 @@ define("sync/reference",
 
       return snapshot;
     }
+
+    function isDirty(reference) {
+      return reference.inFlight.length !== 0 || reference.buffer.length !== 0;
+    }
+
+    function isSaving(reference) {
+      return reference.inFlight.length !== 0;
+    }
     __exports__.reference = reference;
     __exports__.canonical = canonical;
     __exports__.inFlight = inFlight;
     __exports__.buffer = buffer;
+    __exports__.isDirty = isDirty;
+    __exports__.isSaving = isSaving;
   });
 window.sync = requireModule("sync");
 })(window);
