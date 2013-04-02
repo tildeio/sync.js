@@ -36,11 +36,10 @@ var define, requireModule;
 })();
 
 define("sync",
-  ["exports"],
-  function(__exports__) {
+  [],
+  function() {
     "use strict";
-    function ohai() {}
-    __exports__.ohai = ohai;
+
   });
 
 define("sync/lifecycle",
