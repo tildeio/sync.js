@@ -49,6 +49,10 @@ define("sync/lifecycle",
     var applyToCanonical = __dependency1__.applyToCanonical;
 
     function saving(ref) {
+      if (ref.buffer.length === 0) {
+        throw new Error("You can't save a reference's buffer if the buffer is empty");
+      }
+
       if (ref.inFlight.length !== 0) {
         throw new Error("You can't save a reference's buffer if has un-acknowledged in-flight operations");
       }
