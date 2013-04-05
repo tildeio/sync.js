@@ -209,7 +209,7 @@ define("sync/operation",
     }
 
     function transform(op1, op2) {
-      if (op1.isCompatible(op2)) {
+      if (op2.isCompatible(op1)) {
         op2.transform(op1);
         if (op2.noop()) { return 'noop'; }
         return true;
@@ -221,6 +221,7 @@ define("sync/operation",
     function compose(op1, op2) {
       if (op1.isCompatible(op2)) {
         var composed = op1.compose(op2);
+        if (typeof composed === 'object') { return composed; }
         if (op1.noop()) { return 'noop'; }
         return true;
       }
@@ -235,19 +236,25 @@ define("sync/operation",
         throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
       }
 
-      var composed, remove;
+      var composed, remove, replace;
 
       reference.buffer.some(function(bufferedOp, i) {
         composed = compose(bufferedOp, operation);
         if (composed === 'noop') {
           remove = i;
           return true;
+        } else if (typeof composed === 'object') {
+          remove = i;
+          replace = composed;
+          return true;
         }
 
         return !composed;
       });
 
-      if (remove !== undefined) {
+      if (replace !== undefined) {
+        reference.buffer.splice(remove, 1, replace);
+      } else if (remove !== undefined) {
         reference.buffer.splice(remove, 1);
       } else if (!composed) {
         reference.buffer.push(operation);
@@ -312,6 +319,10 @@ define("sync/operations/set",
         }
       },
 
+      /**
+        An add followed by a remove or a remove followed
+        by an add in the buffer is a noop.
+      */
       compose: function(next) {
         if (next instanceof Remove) {
           this.item = undefined;
@@ -361,14 +372,22 @@ define("sync/operations/set",
         }
       },
 
+      /**
+        An add followed by a remove or a remove followed
+        by an add in the buffer is a noop.
+      */
       compose: function(next) {
-        if (next instanceof Remove) {
+        if (next instanceof Add) {
           this.item = undefined;
         }
       },
 
       noop: function() {
         return this.item === undefined;
+      },
+
+      test: function(snapshot) {
+        return snapshot.has(this.item);
       }
     }
 
