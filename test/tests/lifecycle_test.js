@@ -7,7 +7,7 @@ var ref;
 
 function Type() {}
 
-module("Lifecycle", {
+module("Lifecycle - Integration", {
   setup: function() {
     ref = reference(Type, 1);
   }
