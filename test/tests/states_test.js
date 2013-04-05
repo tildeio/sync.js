@@ -88,7 +88,7 @@ test("If there are remaining operations, the reference is still dirty", function
   expectSaving(ref, false);
 });
 
-test("If an update to canonical makes a buffered operation a no-op, it is no longer saving", function() {
+test("If an update to canonical makes a buffered operation a no-op, it is no longer dirty", function() {
   applyToCanonical(ref, new SetProperty('firstName', null, 'Thomas'));
   applyToBuffer(ref, new SetProperty('firstName', 'Thomas', 'Tom'));
 
@@ -99,4 +99,6 @@ test("If an update to canonical makes a buffered operation a no-op, it is no lon
   expectSaving(ref, false);
 });
 
-// TODO: Noop operations
+test("TODO: If an update to canonical makes an in-flightoperation a no-op, it ...", function() {
+  expect(0);
+});
