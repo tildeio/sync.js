@@ -1,7 +1,6 @@
 import { expectCall } from "test_helpers";
 import { reference } from "sync/reference";
 import { applyToCanonical, applyToBuffer } from "sync/operation";
-import { SetProperty } from "sync/operations/set_property";
 import { saving, saved } from "sync/lifecycle";
 
 var ref, canonicalChanged, bufferChanged, inFlightTransformed, bufferTransformed, referenceSaving, referenceSaved;
@@ -133,6 +132,13 @@ test("When a canonical is modified for a property with an operation in the buffe
   applyToBuffer(ref, {
     meta: 'op1',
 
+    // Tell sync.js that this operation is compatible with the operation already
+    // being applied to canonical.
+    isCompatible: function(op) {
+      strictEqual(op.meta, 'op2', "Checking compatibility with op2");
+      return true;
+    },
+
     // Check to make sure that the operation passed into the transform function is
     // the operation applied to the canonical.
     transform: expectCall(function(op) {
@@ -154,13 +160,6 @@ test("When a canonical is modified for a property with an operation in the buffe
   // in the buffer, making it a noop.
   applyToCanonical(ref, {
     meta: 'op2',
-
-    // Tell sync.js that this operation is compatible with the operation already
-    // in the buffer.
-    isCompatible: function(op) {
-      strictEqual(op.meta, 'op1', "Checking compatibility with op1");
-      return true;
-    },
 
     // Check to make sure that the canonical snapshot is empty, as expected.
     apply: expectCall(function(snapshot) {

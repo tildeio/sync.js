@@ -44,6 +44,11 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
   var operation = {
     apply: function(hash) {
       hash.lastName = 'Dale';
+    },
+
+    // don't try to transform the existing operation
+    isCompatible: function(op2) {
+      return false;
     }
   };
 
@@ -52,11 +57,6 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
   operation = {
     apply: function(hash) {
       hash.firstName = 'Thomas'
-    },
-
-    // don't try to transform the existing operation
-    isCompatible: function(op2) {
-      return false;
     }
   };
 
