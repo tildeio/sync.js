@@ -1,8 +1,16 @@
-function async(callback, binding) {
+QUnit.config.testTimeout = 200;
+
+export function async(callback, binding) {
   stop();
 
   return function() {
     start();
-    return callback.apply(binding, arguments);
-  }
+    if (callback) {
+      return callback.apply(binding, arguments);
+    }
+  };
+}
+
+export function expectCall(callback, binding) {
+  return async(callback, binding);
 }
