@@ -42,11 +42,87 @@ define("sync/lifecycle",
     __exports__.saved = saved;
   });
 
+define("sync/modules/copy",
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    // TODO: Better copying strategy
+    function copy(object) {
+      var constructor = object.constructor;
+      if (constructor === Object) {
+        return Object.create(object);
+      } else {
+        // this is assuming that new Constructor(obj) returns
+        // a copy, which is true of Set.
+        var clone = Object.create(constructor.prototype);
+        constructor.call(clone, object);
+        return clone;
+      }
+    }
+
+    __exports__.copy = copy;
+  });
+
+define("sync/modules/set",
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    // TODO: Extract or use an existing library
+
+    function Set(prev) {
+      var list = [];
+
+      if (prev) {
+        prev.forEach(function(item) {
+          list.push(item);
+        });
+      }
+
+      this.add = function(object) {
+        if (this.has(list, object)) { return; }
+        list.push(object);
+      };
+
+      this.remove = function(object) {
+        var index = indexOf(list, object);
+        if (index !== -1) { list.splice(index, 1); }
+      };
+
+      this.has = function(object) {
+        return indexOf(list, object) !== -1;
+      };
+
+      this.clear = function() {
+        list = [];
+      };
+
+      // if we didn't need support for iteration, we could
+      // get away with using the native Set if available
+      this.forEach = function(callback, binding) {
+        for (var i=0, l=list.length; i<l; i++) {
+          if (binding) { callback.call(binding, list[i]); }
+          else { callback(list[i]); }
+        }
+      };
+    }
+
+    function indexOf(list, object) {
+      for (var i=0, l=list.length; i<l; i++) {
+        if (list[i] === object) { return i; }
+      }
+
+      return -1;
+    }
+
+    __exports__.Set = Set;
+  });
+
 define("sync/operation",
   ["sync/reference","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
     var buffer = __dependency1__.buffer;
+    var canonical = __dependency1__.canonical;
     /**
       Note: This file is implemented in an extremely naïve way. At the moment,
       it simply iterates through operations to find transformable or composable
@@ -61,6 +137,12 @@ define("sync/operation",
 
 
     function applyToCanonical(reference, operation) {
+      var prev = canonical(reference);
+
+      if (operation.test && !operation.test(prev)) {
+        throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
+      }
+
       operation.apply(reference.canonical);
 
       var transformed, remove;
@@ -136,8 +218,125 @@ define("sync/operation",
 
       reference.trigger('buffer:change');
     }
+
     __exports__.applyToCanonical = applyToCanonical;
     __exports__.applyToBuffer = applyToBuffer;
+  });
+
+define("sync/operations/set",
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    /**
+      Operations have:
+
+      * toString
+      * apply(snapshot)
+      * isCompatible(Operation)
+      * transform(Operation)
+      * compose(Operation)
+      * noop()
+      * test(snapshot)
+    */
+
+    function Add(item) {
+      if (item === undefined) {
+        throw new Error("Cannot add undefined to a Set");
+      }
+
+      this.item = item;
+    }
+
+    Add.prototype = {
+      constructor: Add,
+
+      toString: function() {
+        return 'Add[' + this.item.toString() + ']';
+      },
+
+      apply: function(snapshot) {
+        snapshot.add(this.item);
+      },
+
+      isCompatible: function(operation) {
+        if (operation instanceof Add || operation instanceof Remove) {
+          return this.item === operation.item;
+        }
+      },
+
+      transform: function(prev) {
+        if (prev instanceof Add) {
+          // noop
+          this.item = undefined;
+        } else {
+          // Is this possible? If I am adding, that must
+          // mean that the current canonical does not contain
+          // the item, so other actors cannot remove it.
+        }
+      },
+
+      compose: function(next) {
+        if (next instanceof Remove) {
+          this.item = undefined;
+        }
+      },
+
+      noop: function() {
+        return this.item === undefined;
+      },
+
+      test: function(snapshot) {
+        return !snapshot.has(this.item);
+      }
+    };
+
+    function Remove(item) {
+      if (item === undefined) {
+        throw new Error("Cannot add undefined to a Set");
+      }
+
+      this.item = item;
+    }
+
+    Remove.prototype = {
+      toString: function() {
+        return 'Remove[' + this.item.toString() + ']';
+      },
+
+      apply: function(snapshot) {
+        snapshot.remove(this.item);
+      },
+
+      isCompatible: function(operation) {
+        if (operation instanceof Add || operation instanceof Remove) {
+          return this.item === operation.item;
+        }
+      },
+
+      transform: function(prev) {
+        if (prev instanceof Remove) {
+          // noop
+          this.item = undefined;
+        } else {
+          // Is this possible? If I am removing, that must
+          // mean that the current canonical does contain
+          // the item, so other actors cannot add it again.
+        }
+      },
+
+      compose: function(next) {
+        if (next instanceof Remove) {
+          this.item = undefined;
+        }
+      },
+
+      noop: function() {
+        return this.item === undefined;
+      }
+    }
+
+    __exports__.Add = Add;
+    __exports__.Remove = Remove;
   });
 
 define("sync/operations/set_property",
@@ -150,6 +349,22 @@ define("sync/operations/set_property",
       this.newValue = newValue;
     }
 
+    /**
+      Operations have:
+
+      * toString
+      * apply(snapshot)
+      * isCompatible(Operation)
+      * transform(Operation)
+      * compose(Operation)
+      * noop()
+      * test(snapshot)
+    */
+
+    function debug() {
+      console.debug.apply(console, arguments);
+    }
+
     SetProperty.prototype = {
       constructor: SetProperty,
 
@@ -158,26 +373,32 @@ define("sync/operations/set_property",
       },
 
       apply: function(hash) {
+        debug('apply', this.toString(), 'to', hash);
         hash[this.property] = this.newValue;
       },
 
       isCompatible: function(other) {
+        debug('checking compatibility of', this.toString(), 'with', other.toString());
         return other instanceof SetProperty && this.property === other.property;
       },
 
       transform: function(prev) {
+        debug('transforming', this.toString(), 'against', prev.toString());
         this.oldValue = prev.newValue;
       },
 
       compose: function(next) {
+        debug('composing', this.toString(), 'with', next.toString());
         this.newValue = next.newValue;
       },
 
       noop: function() {
+        debug('checking', this.toString(), 'for noop');
         return this.oldValue === this.newValue;
       },
 
       test: function(current) {
+        debug('testing precondition of', this.toString(), 'against snapshot', current);
         // The null precondition is satisfied with either null or undefined
         if (this.oldValue === null) {
           return current[this.property] == this.oldValue;
@@ -186,20 +407,37 @@ define("sync/operations/set_property",
         }
       }
     };
+
     __exports__.SetProperty = SetProperty;
   });
 
 define("sync/reference",
-  ["rsvp/events","exports"],
-  function(__dependency1__, __exports__) {
+  ["rsvp/events","sync/modules/copy","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var EventTarget = __dependency1__.EventTarget;
+    var copy = __dependency2__.copy;
 
     function Reference(type, id) {
+      var canonical;
+
+      if (arguments.length === 1) {
+        // TODO: type is metadata, not special
+        id = type;
+        type = null;
+      } else if (typeof id !== 'string' && typeof id !== 'number') {
+        canonical = id;
+        id = type;
+        type = null;
+      } else {
+        canonical = {};
+      }
+
       this.type = type;
       this.id = id;
 
-      this.canonical = {};
+      // The starting representation of the document
+      this.canonical = canonical;
       this.inFlight = [];
       this.buffer = [];
     }
@@ -219,7 +457,7 @@ define("sync/reference",
     }
 
     function inFlight(reference) {
-      var snapshot = Object.create(reference.canonical);
+      var snapshot = copy(reference.canonical);
 
       reference.inFlight.forEach(function(operation) {
         operation.apply(snapshot);
@@ -245,6 +483,7 @@ define("sync/reference",
     function isSaving(reference) {
       return reference.inFlight.length !== 0;
     }
+
     __exports__.reference = reference;
     __exports__.canonical = canonical;
     __exports__.inFlight = inFlight;
