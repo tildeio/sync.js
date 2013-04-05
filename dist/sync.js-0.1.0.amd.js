@@ -421,10 +421,11 @@ define("sync/reference",
     function Reference(type, id) {
       var canonical;
 
-      if (arguments.length === 1) {
+      if (id === undefined) {
         // TODO: type is metadata, not special
         id = type;
         type = null;
+        canonical = {};
       } else if (typeof id !== 'string' && typeof id !== 'number') {
         canonical = id;
         id = type;
