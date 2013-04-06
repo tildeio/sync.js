@@ -63,6 +63,21 @@ define("sync/modules/copy",
     __exports__.copy = copy;
   });
 
+define("sync/modules/merge",
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    function merge(object, other) {
+      for (var prop in other) {
+        object[prop] = other[prop];
+      }
+
+      return object;
+    }
+
+    __exports__.merge = merge;
+  });
+
 define("sync/modules/set",
   ["exports"],
   function(__exports__) {
@@ -147,38 +162,41 @@ define("sync/operation",
 
       var transformed, remove;
 
-      reference.inFlight.some(function(inFlightOp) {
-        transformed = transform(operation, inFlightOp);
-      });
+      var inFlight = [];
+      reference.inFlight.forEach(function(inFlightOp) {
+        var result = inFlightOp.transform(operation),
+            inFlightPrime = result[0];
 
-      if (!transformed) {
-        reference.buffer.some(function(bufferedOp, i) {
-          transformed = transform(operation, bufferedOp);
-          if (transformed === 'noop') { remove = i; }
-        });
+        operation = result[1];
 
-        if (remove !== undefined) {
-          reference.buffer.splice(remove, 1);
+        if (!inFlightPrime.noop()) {
+          inFlight.push(inFlightPrime);
         }
+      });
+      reference.inFlight = inFlight;
+
+      if (!operation.noop()) {
+        var buffer = [];
+        reference.buffer.forEach(function(bufferedOp) {
+          var result = bufferedOp.transform(operation),
+              bufferedPrime = result[0];
+
+          operation = result[1];
+
+          if (!bufferedPrime.noop()) {
+            buffer.push(bufferedPrime);
+          }
+        });
+        reference.buffer = buffer;
       }
 
       reference.trigger('canonical:change');
 
-      if (!transformed) {
+      if (!operation.noop()) {
         reference.trigger('buffer:change');
       } else {
         reference.trigger('buffer:transformed');
       }
-    }
-
-    function transform(op1, op2) {
-      if (op2.isCompatible(op1)) {
-        op2.transform(op1);
-        if (op2.noop()) { return 'noop'; }
-        return true;
-      }
-
-      return false;
     }
 
     function compose(op1, op2) {
@@ -254,6 +272,10 @@ define("sync/operations/set",
       this.item = item;
     }
 
+    var noop = {
+      noop: function() { return true; }
+    };
+
     Add.prototype = {
       constructor: Add,
 
@@ -272,13 +294,10 @@ define("sync/operations/set",
       },
 
       transform: function(prev) {
-        if (prev instanceof Add) {
-          // noop
-          this.item = undefined;
+        if (prev instanceof Add && this.item === prev.item) {
+          return [ noop, noop ];
         } else {
-          // Is this possible? If I am adding, that must
-          // mean that the current canonical does not contain
-          // the item, so other actors cannot remove it.
+          return [ this, prev ];
         }
       },
 
@@ -325,13 +344,10 @@ define("sync/operations/set",
       },
 
       transform: function(prev) {
-        if (prev instanceof Remove) {
-          // noop
-          this.item = undefined;
+        if (prev instanceof Remove && this.item === prev.item) {
+          return [ noop, noop ];
         } else {
-          // Is this possible? If I am removing, that must
-          // mean that the current canonical does contain
-          // the item, so other actors cannot add it again.
+          return [ this, prev ];
         }
       },
 
@@ -355,7 +371,72 @@ define("sync/operations/set",
     }
 
     __exports__.Add = Add;
+    __exports__.noop = noop;
     __exports__.Remove = Remove;
+  });
+
+define("sync/operations/set_properties",
+  ["sync/modules/merge","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var merge = __dependency1__.merge;
+
+    function SetProperties(components) {
+      this.components = components;
+    }
+
+    SetProperties.prototype = {
+      constructor: SetProperties,
+
+      compose: function(other) {
+        var components = merge({}, this.components);
+
+        for (var prop in other.components) {
+          var existing = components[prop],
+              update = other.components[prop];
+
+          if (existing) {
+            // If reverting a property back to its original value
+            if (existing[0] === update[1]) {
+              delete components[prop];
+            } else {
+              existing[1] = update[1];
+            }
+          } else {
+            components[prop] = update;
+          }
+        }
+
+        return new SetProperties(components);
+      },
+
+      transform: function(other) {
+        var thisPrime = {},
+            otherPrime = {},
+            current = this.components,
+            prev = other.components,
+            component;
+
+        for (var prop in prev) {
+          otherPrime[prop] = prev[prop].slice();
+        }
+
+        for (var prop in current) {
+          if (component = otherPrime[prop]) {
+            thisPrime[prop] = component;
+            component[0] = component[1];
+            component[1] = current[prop][1];
+            delete otherPrime[prop];
+          } else {
+            thisPrime[prop] = current[prop].slice();
+          }
+        }
+
+        return [ new SetProperties(thisPrime), new SetProperties(otherPrime) ];
+      }
+    }
+
+    __exports__.SetProperties = SetProperties;
   });
 
 define("sync/operations/set_property",
@@ -403,7 +484,18 @@ define("sync/operations/set_property",
 
       transform: function(prev) {
         debug('transforming', this.toString(), 'against', prev.toString());
-        this.oldValue = prev.newValue;
+
+        if (this.property === prev.property) {
+          return [
+            new SetProperty(this.property, prev.newValue, this.newValue),
+            new SetProperty(this.property, null, null)
+          ];
+        } else {
+          return [
+            new SetProperty(this.property, this.oldValue, this.newValue),
+            new SetProperty(prev.property, prev.oldValue, prev.newValue)
+          ];
+        }
       },
 
       compose: function(next) {

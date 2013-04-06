@@ -28,6 +28,7 @@ test("Initially, a reference is neither dirty nor saving", function() {
 
 test("After making a change to canonical, a reference is still neither dirty nor saving", function() {
   applyToCanonical(ref, {
+    noop: noop,
     apply: expectCall(function(snapshot) {
       deepEqual(snapshot, {}, "The canonical is empty");
     })
@@ -159,19 +160,16 @@ test("If there are remaining operations, the reference is still dirty", function
 });
 
 test("If an update to canonical makes a buffered operation a no-op, it is no longer dirty", function() {
+  var isNoop = function() { return true; };
+
   applyToBuffer(ref, {
     meta: 'op1',
     apply: noop,
 
-    // Assert compatibility with op2 so that transformation can occur
-    isCompatible: expectCall(function(op) {
-      strictEqual(op.meta, 'op2');
-      return true;
-    }),
-
     // Ensure that we're transforming op2
     transform: expectCall(function(op) {
       strictEqual(op.meta, 'op2');
+      return [ this, { noop: isNoop } ];
     }),
 
     // Once transformation is done, assert that the operation is now a noop
@@ -183,7 +181,8 @@ test("If an update to canonical makes a buffered operation a no-op, it is no lon
   // This should make the buffered operation a noop
   applyToCanonical(ref, {
     meta: 'op2',
-    apply: noop
+    apply: noop,
+    noop: noop
   });
 
   // Since op1, which was applied to the buffer, became a noop, the reference is no

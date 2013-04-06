@@ -1,4 +1,4 @@
-import { Add, Remove } from 'sync/operations/set';
+import { Add, Remove, noop } from 'sync/operations/set';
 import { applyToCanonical, applyToBuffer } from "sync/operation";
 import { reference, canonical, buffer, isDirty } from "sync/reference";
 import { Set } from "sync/modules/set";
@@ -74,12 +74,18 @@ test("Add#isCompatible is incompatible with Remove operations with a different i
   strictEqual(add.isCompatible(remove), false, "the two operations are incompatible");
 });
 
-test("Add#transform will make the item undefined when the previous operation has the same item", function() {
+test("Add#transform will return the two items when they are operating on different objects", function() {
   var add1 = new Add(ref1),
       add2 = new Add(ref2);
 
-  add1.transform(add2);
-  strictEqual(add1.item, undefined, "The item is now undefined and the operation is ready for pruning via Add#noop");
+  deepEqual(add1.transform(add2), [ add1, add2 ]);
+});
+
+test("Add#transform will make the item undefined when the previous operation has the same item", function() {
+  var add1 = new Add(ref1),
+      add2 = new Add(ref1);
+
+  deepEqual(add1.transform(add2), [ noop, noop ]);
 });
 
 test("Add#compose will make the item undefined if the operation to compose with is a remove with the same item", function() {
@@ -163,12 +169,18 @@ test("Remove#isCompatible is incompatible with Add operations with a different i
   strictEqual(remove.isCompatible(add), false, "the two operations are incompatible");
 });
 
-test("Remove#transform will make the item undefined when the previous operation has the same item", function() {
+test("Remove#transform will return the two items when they are operating on different objects", function() {
   var remove1 = new Remove(ref1),
       remove2 = new Remove(ref2);
 
-  remove1.transform(remove2);
-  strictEqual(remove1.item, undefined, "The item is now undefined and the operation is ready for pruning via Add#noop");
+  deepEqual(remove1.transform(remove2), [ remove1, remove2 ]);
+});
+
+test("Remove#transform will make the item undefined when the previous operation has the same item", function() {
+  var remove1 = new Remove(ref1),
+      remove2 = new Remove(ref1);
+
+  deepEqual(remove1.transform(remove2), [ noop, noop ]);
 });
 
 test("Remove#compose will make the item undefined if the operation to compose with is an add with the same item", function() {

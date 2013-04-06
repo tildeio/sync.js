@@ -11,6 +11,7 @@ module("Operation", {
     ref = reference(Type, '1');
 
     var operation = {
+      noop: function() { return false; },
       apply: function(hash) {
         hash.firstName = 'Tom';
       }
@@ -42,35 +43,48 @@ test("applying operations to canonical and then buffer accumulates the operation
 });
 
 test("applying an operation to canonical after buffer reapplies the buffer on top", function() {
+  var noop = function() { return false; };
+  var isNoop = function() { return true; };
+
   var operation = {
+    meta: 'op1',
+
+    noop: noop,
+
     apply: function(hash) {
       hash.lastName = 'Dale';
     },
 
-    // don't try to transform the existing operation
-    isCompatible: function(op2) {
-      return false;
+    transform: function(prev) {
+      return [ this, { noop: isNoop } ];
     }
   };
 
   applyToBuffer(ref, operation);
 
   operation = {
+    meta: 'op2',
+
+    noop: noop,
+
     apply: function(hash) {
       hash.firstName = 'Thomas'
+    },
+
+    transform: function(prev) {
+      return [ this, { noop: isNoop } ];
     }
   };
 
   applyToCanonical(ref, operation);
 
   operation = {
+    meta: 'op3',
+
+    noop: noop,
+
     apply: function(hash) {
       hash.lastName = 'Dayl'
-    },
-
-    // don't try to transform the existing operation
-    isCompatible: function() {
-      return false;
     }
   };
 

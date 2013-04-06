@@ -69,11 +69,8 @@ module("Triggered Events", {
 
 test("When an operation is added to canonical, the canonical:change and buffer:change events are fired", function() {
   var operation = {
-    test: expectCall(function() {
-      return true;
-    }),
-
-    apply: expectCall()
+    apply: expectCall(),
+    noop: function() { return false; }
   };
 
   applyToCanonical(ref, operation);
@@ -132,22 +129,14 @@ test("When a canonical is modified for a property with an operation in the buffe
   applyToBuffer(ref, {
     meta: 'op1',
 
-    // Tell sync.js that this operation is compatible with the operation already
-    // being applied to canonical.
-    isCompatible: function(op) {
-      strictEqual(op.meta, 'op2', "Checking compatibility with op2");
-      return true;
-    },
-
     // Check to make sure that the operation passed into the transform function is
     // the operation applied to the canonical.
     transform: expectCall(function(op) {
       strictEqual(op.meta, 'op2', "The operation to transform against is op2");
-    }),
-
-    // When asked, tell sync.js that the operation is now a noop.
-    noop: expectCall(function() {
-      return true;
+      return [
+        { noop: function() { return true; } },
+        { noop: function() { return true; } }
+      ]
     })
   });
 
@@ -164,7 +153,9 @@ test("When a canonical is modified for a property with an operation in the buffe
     // Check to make sure that the canonical snapshot is empty, as expected.
     apply: expectCall(function(snapshot) {
       deepEqual(snapshot, {}, "The snapshot is empty so far");
-    })
+    }),
+
+    noop: expectCall()
   });
 
   firedEvents('canonical:change', 'buffer:transformed');
@@ -172,7 +163,8 @@ test("When a canonical is modified for a property with an operation in the buffe
 
 test("When a canonical is modified for a property without an operation in the buffer, its buffer:change event is fired", function() {
   applyToCanonical(ref, {
-    apply: expectCall()
+    apply: expectCall(),
+    noop: function() { return false; }
   });
 
   firedEvents('canonical:change', 'buffer:change');
