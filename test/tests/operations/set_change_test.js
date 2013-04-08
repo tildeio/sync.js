@@ -119,7 +119,7 @@ test("SetChange#compose will clear a remove->add", function() {
   }));
 });
 
-test("SetProperties#transform with two orthogonal add components", function() {
+test("SetChange#transform with two orthogonal add components", function() {
   var change1 = new SetChange({
     add: new Set([ 1 ])
   });
@@ -141,7 +141,7 @@ test("SetProperties#transform with two orthogonal add components", function() {
   }));
 });
 
-test("SetProperties#transform with two orthogonal remove components", function() {
+test("SetChange#transform with two orthogonal remove components", function() {
   var change1 = new SetChange({
     remove: new Set([ 1 ])
   });
@@ -163,7 +163,7 @@ test("SetProperties#transform with two orthogonal remove components", function()
   }));
 });
 
-test("SetProperties#transform with two equivalent add components", function() {
+test("SetChange#transform with two equivalent add components", function() {
   var change1 = new SetChange({
     add: new Set([ 1, 2 ])
   });
@@ -185,7 +185,7 @@ test("SetProperties#transform with two equivalent add components", function() {
   }));
 });
 
-test("SetProperties#transform with two equivalent remove components", function() {
+test("SetChange#transform with two equivalent remove components", function() {
   var change1 = new SetChange({
     remove: new Set([ 1, 2 ])
   });
@@ -205,4 +205,31 @@ test("SetProperties#transform with two equivalent remove components", function()
   equalSetChange(change2Prime, new SetChange({
     remove: new Set([ 3 ])
   }));
+});
+
+test("SetChange#noop when there are no adds or removes", function() {
+  var change = new SetChange();
+  strictEqual(change.noop(), true, "An empty change is a noop");
+});
+
+test("SetChange#noop when there are adds but no removes", function() {
+  var change = new SetChange({
+    add: new Set([ 1 ])
+  });
+  strictEqual(change.noop(), false, "A change with adds is not a noop");
+});
+
+test("SetChange#noop when there are removes but no add", function() {
+  var change = new SetChange({
+    remove: new Set([ 1 ])
+  });
+  strictEqual(change.noop(), false, "A change with removes is not a noop");
+});
+
+test("SetChange#noop when there are removes and adds", function() {
+  var change = new SetChange({
+    remove: new Set([ 1 ]),
+    add: new Set([ 2 ])
+  });
+  strictEqual(change.noop(), false, "A change with removes and adds is not a noop");
 });

@@ -393,6 +393,7 @@ define("sync/operations/set_change",
     var Set = __dependency1__.Set;
 
     function SetChange(components) {
+      components = components || {};
       this.add = components.add || new Set();
       this.remove = components.remove || new Set();
     }
@@ -473,6 +474,10 @@ define("sync/operations/set_change",
         }, this);
 
         return [ thisPrime, otherPrime ];
+      },
+
+      noop: function() {
+        return this.add.size === 0 && this.remove.size === 0;
       }
     };
 
