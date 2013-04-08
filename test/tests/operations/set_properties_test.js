@@ -111,3 +111,23 @@ test("SetProperties#transform with some compatible components and some incompati
     })
   ]);
 });
+
+test("SetProperties#noop with a property", function() {
+  var change = new SetProperties({
+    firstName: [ null, "Tom" ]
+  });
+  strictEqual(change.noop(), false, "A change with a single property is not a noop");
+});
+
+test("SetProperties#noop with properties", function() {
+  var change = new SetProperties({
+    firstName: [ null, "Tom" ],
+    lastName: [ null, "Dale" ]
+  });
+  strictEqual(change.noop(), false, "A change with a single property is not a noop");
+});
+
+test("SetProperties#noop with no properties", function() {
+  var change = new SetProperties({});
+  strictEqual(change.noop(), true, "A change with no properties is a noop");
+});

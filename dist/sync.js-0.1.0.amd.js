@@ -542,6 +542,14 @@ define("sync/operations/set_properties",
         }
 
         return [ new SetProperties(thisPrime), new SetProperties(otherPrime) ];
+      },
+
+      noop: function() {
+        for (var prop in this.components) {
+          return false;
+        }
+
+        return true;
       }
     }
 
