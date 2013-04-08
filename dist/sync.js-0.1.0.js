@@ -513,6 +513,16 @@ define("sync/operations/set_change",
         return [ thisPrime, otherPrime ];
       },
 
+      apply: function(set) {
+        this.add.forEach(function(item) {
+          set.add(item);
+        });
+
+        this.remove.forEach(function(item) {
+          set.remove(item);
+        });
+      },
+
       noop: function() {
         return this.add.size === 0 && this.remove.size === 0;
       }
@@ -579,6 +589,14 @@ define("sync/operations/set_properties",
         }
 
         return [ new SetProperties(thisPrime), new SetProperties(otherPrime) ];
+      },
+
+      apply: function(hash) {
+        var components = this.components;
+
+        for (var prop in components) {
+          hash[prop] = components[prop][1];
+        }
       },
 
       noop: function() {

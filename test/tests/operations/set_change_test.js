@@ -233,3 +233,37 @@ test("SetChange#noop when there are removes and adds", function() {
   });
   strictEqual(change.noop(), false, "A change with removes and adds is not a noop");
 });
+
+test("SetChange#apply when there are removes", function() {
+  var change = new SetChange({
+    remove: new Set([ 1 ])
+  });
+
+  var set = new Set([ 1, 2, 3 ]);
+  change.apply(set);
+
+  equalSet(set, new Set([ 2, 3 ]));
+});
+
+test("SetChange#apply when there are adds", function() {
+  var change = new SetChange({
+    add: new Set([ 1 ])
+  });
+
+  var set = new Set([ 2, 3 ]);
+  change.apply(set);
+
+  equalSet(set, new Set([ 1, 2, 3 ]));
+});
+
+test("SetChange#apply when there are removes and adds", function() {
+  var change = new SetChange({
+    add: new Set([ 1 ]),
+    remove: new Set([ 2 ])
+  });
+
+  var set = new Set([ 2, 3 ]);
+  change.apply(set);
+
+  equalSet(set, new Set([ 1, 3 ]));
+});

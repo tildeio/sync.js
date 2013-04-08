@@ -131,3 +131,38 @@ test("SetProperties#noop with no properties", function() {
   var change = new SetProperties({});
   strictEqual(change.noop(), true, "A change with no properties is a noop");
 });
+
+test("SetProperties#apply with a single property", function() {
+  var change = new SetProperties({
+    firstName: [ null, "Tom" ]
+  });
+
+  var object = {};
+  change.apply(object);
+
+  deepEqual(object, { firstName: "Tom" });
+});
+
+test("SetProperties#apply with multiple properties", function() {
+  var change = new SetProperties({
+    firstName: [ null, "Tom" ],
+    lastName: [ null, "Dale" ]
+  });
+
+  var object = {};
+  change.apply(object);
+
+  deepEqual(object, { firstName: "Tom", lastName: "Dale" });
+});
+
+test("SetProperties#apply on an object that already has properties", function() {
+  var change = new SetProperties({
+    firstName: [ "Tom", "Thomas" ],
+    lastName: [ null, "Dale" ]
+  });
+
+  var object = { firstName: "Tom" };
+  change.apply(object);
+
+  deepEqual(object, { firstName: "Thomas", lastName: "Dale" });
+});
