@@ -130,14 +130,24 @@ define("sync/modules/set",
         });
       }
 
+      this.size = list.length;
+
+      this.toString = function() {
+        return "{ " + list.join(", ") + " }";
+      };
+
       this.add = function(object) {
-        if (this.has(list, object)) { return; }
+        if (this.has(object)) { return; }
         list.push(object);
+        this.size++;
       };
 
       this.remove = function(object) {
         var index = indexOf(list, object);
-        if (index !== -1) { list.splice(index, 1); }
+        if (index !== -1) {
+          list.splice(index, 1);
+          this.size--;
+        }
       };
 
       this.has = function(object) {
@@ -146,6 +156,7 @@ define("sync/modules/set",
 
       this.clear = function() {
         list = [];
+        this.size = 0;
       };
 
       // if we didn't need support for iteration, we could
@@ -410,6 +421,99 @@ define("sync/operations/set",
     __exports__.Add = Add;
     __exports__.noop = noop;
     __exports__.Remove = Remove;
+  });
+
+define("sync/operations/set_change",
+  ["sync/modules/set","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Set = __dependency1__.Set;
+
+    function SetChange(components) {
+      this.add = components.add || new Set();
+      this.remove = components.remove || new Set();
+    }
+
+    SetChange.prototype = {
+      constructor: SetChange,
+
+      toString: function() {
+        var out = [];
+
+        if (this.add.size > 0) {
+          out.push("add: " + this.add.toString());
+        }
+
+        if (this.remove.size > 0) {
+          out.push("remove: " + this.remove.toString());
+        }
+
+        return "SetChange[" + out.join(", ") + "]";
+      },
+
+      compose: function(other) {
+        var change = new SetChange({
+          add: this.add,
+          remove: this.remove
+        });
+
+        other.add.forEach(function(item) {
+          if (change.remove.has(item)) {
+            change.remove.remove(item);
+          } else {
+            change.add.add(item);
+          }
+        });
+
+        other.remove.forEach(function(item) {
+          if (change.add.has(item)) {
+            change.add.remove(item);
+          } else {
+            change.remove.add(item);
+          }
+        });
+
+        return change;
+      },
+
+      transform: function(other) {
+        var thisPrime = new SetChange({}),
+            otherPrime = new SetChange({});
+
+        var thisPrimeAdd = thisPrime.add,
+            thisPrimeRemove = thisPrime.remove,
+            otherPrimeAdd = otherPrime.add,
+            otherPrimeRemove = otherPrime.remove;
+
+        this.add.forEach(function(item) {
+          if (!other.add.has(item)) {
+            thisPrimeAdd.add(item);
+          }
+        });
+
+        this.remove.forEach(function(item) {
+          if (!other.remove.has(item)) {
+            thisPrimeRemove.add(item);
+          }
+        });
+
+        other.add.forEach(function(item) {
+          if (!this.add.has(item)) {
+            otherPrimeAdd.add(item);
+          }
+        }, this);
+
+        other.remove.forEach(function(item) {
+          if (!this.remove.has(item)) {
+            otherPrimeRemove.add(item);
+          }
+        }, this);
+
+        return [ thisPrime, otherPrime ];
+      }
+    };
+
+    __exports__.SetChange = SetChange;
   });
 
 define("sync/operations/set_properties",
