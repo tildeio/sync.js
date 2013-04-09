@@ -40,14 +40,14 @@ test("After making a change to canonical, a reference is still neither dirty nor
 
 test("After making a change to the buffer, a reference is dirty", function() {
   // The operation's `apply` method is only called if the buffered snapshot is updated
-  applyToBuffer(ref, {});
+  applyToBuffer(ref, { noop: noop });
 
   expectDirty(ref, true);
   expectSaving(ref, false);
 });
 
 test("After marking a reference as saving, it is both dirty and saving", function() {
-  applyToBuffer(ref, {});
+  applyToBuffer(ref, { noop: noop });
   saving(ref);
 
   expectDirty(ref, true);
@@ -56,6 +56,8 @@ test("After marking a reference as saving, it is both dirty and saving", functio
 
 test("After acknowledging a reference, it is no longer dirty or saving", function() {
   applyToBuffer(ref, {
+    noop: noop,
+
     // apply is called in order to update the canonical once `saved` is called
     apply: function(snapshot) {
       deepEqual(snapshot, {}, "The snapshot is still empty");
@@ -71,19 +73,20 @@ test("After acknowledging a reference, it is no longer dirty or saving", functio
 
 test("Acknowledging a record as saved leaves it dirty if there were intervening changes to the buffer", function() {
   applyToBuffer(ref, {
+    noop: noop,
+
     apply: function(snapshot) {
       snapshot.firstName = 'Tom';
+    },
+
+    compose: function(other) {
+      return this;
     }
   });
 
   saving(ref);
 
-  applyToBuffer(ref, {
-    test: expectCall(function(snapshot) {
-      deepEqual(snapshot, { firstName: 'Tom' }, "The operation is applied on top of the first operation");
-      return true;
-    })
-  });
+  applyToBuffer(ref, { noop: noop });
 
   saved(ref);
 
@@ -98,20 +101,17 @@ test("If a buffered operation reverses itself, the reference is no longer dirty"
     // applying the operation will make the reference dirty
     apply: noop,
 
-    // say we're compatible so we have an opportunity to compose with the second operation
-    isCompatible: expectCall(function() {
-      return true;
-    }),
-
     // check to make sure we're composing with op2
     compose: expectCall(function(op) {
       strictEqual(op.meta, 'op2', "Composing op1 with op2");
+      this.nooped = true;
+      return this;
     }),
 
     // once we've composed, report that the operation is now a noop
     noop: expectCall(function() {
-      return true;
-    })
+      return this.nooped;
+    }, 2)
   });
 
   applyToBuffer(ref, {
@@ -123,36 +123,42 @@ test("If a buffered operation reverses itself, the reference is no longer dirty"
 });
 
 test("If there are remaining operations, the reference is still dirty", function() {
+  var count = 0;
+
   applyToBuffer(ref, {
     meta: 'op1',
 
     // applying the operation will make the reference dirty
     apply: noop,
 
-    // say we're compatible so we have an opportunity to compose with the second operation
-    isCompatible: expectCall(function(op) {
-      return op.meta === 'op3';
-    }, 2),
-
     // check to make sure we're composing with op2
     compose: expectCall(function(op) {
-      strictEqual(op.meta, 'op3', "Composing op1 with op2");
-    }),
+      if (count === 0) {
+        strictEqual(op.meta, 'op2', "Composing op1 with op2");
+      } else if (count === 1) {
+        strictEqual(op.meta, 'op3', "Composing op1 with op3");
+      } else {
+        ok(false, "Should not get here");
+      }
+      count++;
 
-    // once we've composed, report that the operation is now a noop
+      return this;
+    }, 2),
+
+    // once we've composed twice, report that the operation is now a noop
     noop: expectCall(function() {
-      return true;
-    })
+      return false;
+    }, 3)
   });
 
   applyToBuffer(ref, {
     meta: 'op2',
-
-    apply: expectCall()
+    noop: noop
   });
 
   applyToBuffer(ref, {
-    meta: 'op3'
+    meta: 'op3',
+    noop: noop
   });
 
   expectDirty(ref, true);
@@ -166,15 +172,21 @@ test("If an update to canonical makes a buffered operation a no-op, it is no lon
     meta: 'op1',
     apply: noop,
 
+    compose: function(op) {
+      return this;
+    },
+
     // Ensure that we're transforming op2
     transform: expectCall(function(op) {
       strictEqual(op.meta, 'op2');
-      return [ this, { noop: isNoop } ];
+      this.nooped = true;
+      return [ { noop: isNoop }, this ];
     }),
 
     // Once transformation is done, assert that the operation is now a noop
     noop: expectCall(function() {
-      return true;
+      debugger;
+      return this.nooped;
     })
   });
 
@@ -189,8 +201,4 @@ test("If an update to canonical makes a buffered operation a no-op, it is no lon
   // longer dirty.
   expectDirty(ref, false);
   expectSaving(ref, false);
-});
-
-test("TODO: If an update to canonical makes an in-flightoperation a no-op, it ...", function() {
-  expect(0);
 });

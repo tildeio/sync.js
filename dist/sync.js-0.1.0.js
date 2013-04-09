@@ -53,12 +53,13 @@ define("sync/lifecycle",
         throw new Error("You can't save a reference's buffer if the buffer is empty");
       }
 
-      if (ref.inFlight.length !== 0) {
-        throw new Error("You can't save a reference's buffer if has un-acknowledged in-flight operations");
+      if (ref.awaitingAck) {
+        throw new Error("You can't save a reference's buffer if its existing in-flight operation is unacknowledged");
       }
 
-      ref.inFlight = ref.buffer.slice();
-      ref.buffer = [];
+      ref.inFlight = ref.buffer;;
+      ref.buffer = null;
+      ref.awaitingAck = true;
 
       ref.trigger('lifecycle:saving');
       // don't fire buffer:change because moving the buffer to in-flight
@@ -66,15 +67,15 @@ define("sync/lifecycle",
     }
 
     function saved(ref) {
-      ref.inFlight.forEach(function(op) {
-        op.apply(ref.canonical);
-      });
+      ref.inFlight.apply(ref.canonical);
 
-      ref.inFlight = [];
+      ref.inFlight = null;
+      ref.awaitingAck = false;
 
       ref.trigger('lifecycle:saved');
       ref.trigger('canonical:change');
     }
+
     __exports__.saving = saving;
     __exports__.saved = saved;
   });
@@ -200,47 +201,37 @@ define("sync/operation",
 
 
     function applyToCanonical(reference, operation) {
-      var prev = canonical(reference);
-
-      if (operation.test && !operation.test(prev)) {
-        throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
-      }
-
       operation.apply(reference.canonical);
 
-      var transformed, remove;
+      var transformed, remove, inFlightPrime, bufferPrime, changedBuffer;
+      var inFlight = reference.inFlight, buffer = reference.buffer;
 
-      var inFlight = [];
-      reference.inFlight.forEach(function(inFlightOp) {
-        var result = inFlightOp.transform(operation),
-            inFlightPrime = result[0];
+      if (inFlight) {
+        var result = inFlight.transform(operation);
 
+        inFlightPrime = result[0];
         operation = result[1];
 
-        if (!inFlightPrime.noop()) {
-          inFlight.push(inFlightPrime);
-        }
-      });
-      reference.inFlight = inFlight;
+        reference.inFlight = inFlightPrime;
+      }
 
       if (!operation.noop()) {
-        var buffer = [];
-        reference.buffer.forEach(function(bufferedOp) {
-          var result = bufferedOp.transform(operation),
-              bufferedPrime = result[0];
+        if (buffer) {
+          var result = buffer.transform(operation);
 
+          bufferPrime = result[0];
           operation = result[1];
+          changedBuffer = !bufferPrime.noop();
 
-          if (!bufferedPrime.noop()) {
-            buffer.push(bufferedPrime);
-          }
-        });
-        reference.buffer = buffer;
+          reference.buffer = changedBuffer ? bufferPrime : null;
+        } else {
+          changedBuffer = true;
+        }
       }
 
       reference.trigger('canonical:change');
 
-      if (!operation.noop()) {
+      if (changedBuffer) {
         reference.trigger('buffer:change');
       } else {
         reference.trigger('buffer:transformed');
@@ -259,35 +250,15 @@ define("sync/operation",
     }
 
     function applyToBuffer(reference, operation) {
-      var prev = buffer(reference);
+      var buffer = reference.buffer;
 
-      if (operation.test && !operation.test(prev)) {
-        throw new Error("An operation you tried to apply (" + operation + ") had an unmet precondition");
+      if (buffer) {
+        buffer = reference.buffer = buffer.compose(operation);
+      } else {
+        buffer = reference.buffer = operation;
       }
 
-      var composed, remove, replace;
-
-      reference.buffer.some(function(bufferedOp, i) {
-        composed = compose(bufferedOp, operation);
-        if (composed === 'noop') {
-          remove = i;
-          return true;
-        } else if (typeof composed === 'object') {
-          remove = i;
-          replace = composed;
-          return true;
-        }
-
-        return !composed;
-      });
-
-      if (replace !== undefined) {
-        reference.buffer.splice(remove, 1, replace);
-      } else if (remove !== undefined) {
-        reference.buffer.splice(remove, 1);
-      } else if (!composed) {
-        reference.buffer.push(operation);
-      }
+      if (buffer.noop()) { reference.buffer = null; }
 
       reference.trigger('buffer:change');
     }
@@ -722,8 +693,9 @@ define("sync/reference",
 
       // The starting representation of the document
       this.canonical = canonical;
-      this.inFlight = [];
-      this.buffer = [];
+      this.inFlight = null;
+      this.buffer = null;
+      this.awaitingAck = false;
     }
 
     Reference.prototype = {
@@ -741,31 +713,29 @@ define("sync/reference",
     }
 
     function inFlight(reference) {
-      var snapshot = copy(reference.canonical);
+      var snapshot = copy(reference.canonical),
+          inFlight = reference.inFlight;
 
-      reference.inFlight.forEach(function(operation) {
-        operation.apply(snapshot);
-      });
+      if (inFlight) { inFlight.apply(snapshot); }
 
       return snapshot;
     }
 
     function buffer(reference) {
-      var snapshot = inFlight(reference);
+      var snapshot = inFlight(reference),
+          buffer = reference.buffer;
 
-      reference.buffer.forEach(function(operation) {
-        operation.apply(snapshot);
-      });
+      if (buffer) { buffer.apply(snapshot); }
 
       return snapshot;
     }
 
     function isDirty(reference) {
-      return reference.inFlight.length !== 0 || reference.buffer.length !== 0;
+      return !!(reference.awaitingAck || reference.buffer);
     }
 
     function isSaving(reference) {
-      return reference.inFlight.length !== 0;
+      return !!reference.awaitingAck;
     }
 
     __exports__.reference = reference;

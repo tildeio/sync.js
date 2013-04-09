@@ -1,6 +1,7 @@
 import { reference, canonical, buffer, inFlight } from 'sync/reference';
 import { applyToBuffer, applyToCanonical } from 'sync/operation';
 import { SetProperty } from 'sync/operations/set_property';
+import { SetProperties } from 'sync/operations/set_properties';
 import { saving, saved } from 'sync/lifecycle';
 
 var ref;
@@ -55,7 +56,7 @@ module("Lifecycle - Integration", {
     The buffered snapshot is `{ firstName: 'Tom', lastName: 'Dale' }`
 */
 test("Scenario 1 (See Comment)", function() {
-  var op1 = new SetProperty('lastName', null, 'Dale');
+  var op1 = new SetProperties({ lastName: [ null, 'Dale' ] });
 
   applyToBuffer(ref, op1);
 
@@ -68,7 +69,7 @@ test("Scenario 1 (See Comment)", function() {
   deepEqual(inFlight(ref), { lastName: 'Dale' }, "The in-flight snapshot has the in-flight update");
   deepEqual(buffer(ref), { lastName: 'Dale' }, "The buffer still has the update");
 
-  var op2 = new SetProperty('firstName', null, 'Tom');
+  var op2 = new SetProperties({ firstName: [ null, 'Tom' ] });
 
   applyToBuffer(ref, op2);
 
@@ -84,7 +85,7 @@ test("Scenario 1 (See Comment)", function() {
 
   saving(ref);
 
-  var op3 = new SetProperty('firstName', null, 'Thomas');
+  var op3 = new SetProperties({ firstName: [ null, 'Thomas' ] });
 
   applyToCanonical(ref, op3);
 
@@ -107,8 +108,8 @@ test("Scenario 1 (See Comment)", function() {
     The buffered snapshot is `{ firstName: 'Tom' }`
 */
 test("Scenario 2 (See Comment)", function() {
-  applyToBuffer(ref, new SetProperty('firstName', null, 'Tom'));
-  applyToCanonical(ref, new SetProperty('firstName', null, 'Thomas'));
+  applyToBuffer(ref, new SetProperties({ firstName: [ null, 'Tom' ] }));
+  applyToCanonical(ref, new SetProperties({ firstName: [ null, 'Thomas' ] }));
 
   // Note that this works, because the buffered operation was transformed
   // to have the canonical value as its oldValue, which allows its
@@ -116,23 +117,6 @@ test("Scenario 2 (See Comment)", function() {
 
   deepEqual(canonical(ref), { firstName: 'Thomas' });
   deepEqual(buffer(ref), { firstName: 'Tom' });
-});
-
-/**
-  Scenario:
-
-  Setup:
-    Create a fresh reference
-
-  Step 1:
-    Apply Set[firstName, Tom->Thomas] to the buffer
-  Test:
-    Step 1 throws
-*/
-test("Scenario 3 (See Comment)", function() {
-  throws(function() {
-    applyToBuffer(ref, new SetProperty('firstName', 'Tom', 'Thomas'));
-  });
 });
 
 test("The saving() function throws if the reference has no operations", function() {

@@ -4,6 +4,7 @@ import { applyToCanonical, applyToBuffer } from "sync/operation";
 import { saving, saved } from "sync/lifecycle";
 
 var ref, canonicalChanged, bufferChanged, inFlightTransformed, bufferTransformed, referenceSaving, referenceSaved;
+var noop = function() {};
 
 var events;
 
@@ -34,6 +35,7 @@ function firedEvents() {
 }
 
 var firedEvent = firedEvents;
+var noop = function() {}
 
 module("Triggered Events", {
   setup: function() {
@@ -70,7 +72,7 @@ module("Triggered Events", {
 test("When an operation is added to canonical, the canonical:change and buffer:change events are fired", function() {
   var operation = {
     apply: expectCall(),
-    noop: function() { return false; }
+    noop: expectCall()
   };
 
   applyToCanonical(ref, operation);
@@ -79,22 +81,13 @@ test("When an operation is added to canonical, the canonical:change and buffer:c
 });
 
 test("When an operation is added to the buffer, the buffer:change event is fired", function() {
-  applyToBuffer(ref, {
-    test: expectCall(function() {
-      return true;
-    })
-  });
+  applyToBuffer(ref, { noop: noop });
 
   firedEvent('buffer:change');
 });
 
 test("When a reference is marked as saving, its lifecycle:saving event is fired", function() {
-  applyToBuffer(ref, {
-    test: expectCall(function() {
-      return true;
-    })
-  });
-
+  applyToBuffer(ref, { noop: noop, apply: noop });
   saving(ref);
 
   firedEvents('buffer:change', 'lifecycle:saving');
@@ -102,10 +95,7 @@ test("When a reference is marked as saving, its lifecycle:saving event is fired"
 
 test("When a reference is marked as saved, its lifecycle:saved event is fired", function() {
   applyToBuffer(ref, {
-    test: expectCall(function() {
-      return true;
-    }),
-
+    noop: noop,
     apply: expectCall(function(snapshot) {
       deepEqual(snapshot, {}, "The initial state of the canonical is empty");
     })
@@ -128,6 +118,14 @@ test("When a canonical is modified for a property with an operation in the buffe
   // because the snapshot of the buffer hasn't changed.
   applyToBuffer(ref, {
     meta: 'op1',
+
+    noop: noop,
+
+    // the later applyToCanonical will need to compose this operation with the result
+    // of transforming.
+    compose: function(other) {
+      return this;
+    },
 
     // Check to make sure that the operation passed into the transform function is
     // the operation applied to the canonical.
@@ -168,12 +166,4 @@ test("When a canonical is modified for a property without an operation in the bu
   });
 
   firedEvents('canonical:change', 'buffer:change');
-});
-
-test("When a canonical's modification moots the last operation in the buffer, it is no longer dirty", function() {
-  expect(0);
-});
-
-test("TODO: When a canonical's modification moots the last operation in the in-flight, it ...", function() {
-  expect(0);
 });

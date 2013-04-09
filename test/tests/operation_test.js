@@ -4,7 +4,7 @@ import { reference, canonical, buffer } from "sync/reference";
 
 function Type() {}
 
-var ref;
+var noop = function() { }, ref;
 
 module("Operation", {
   setup: function() {
@@ -31,6 +31,8 @@ test("applied operations apply to the buffered snaphot", function() {
 
 test("applying operations to canonical and then buffer accumulates the operations", function() {
   var operation = {
+    noop: noop,
+
     apply: function(hash) {
       hash.lastName = 'Dale';
     }
@@ -53,6 +55,10 @@ test("applying an operation to canonical after buffer reapplies the buffer on to
 
     apply: function(hash) {
       hash.lastName = 'Dale';
+    },
+
+    compose: function(other) {
+      return this;
     },
 
     transform: function(prev) {
@@ -98,21 +104,16 @@ test("An operation can return an object from compose to replace itself with that
   applyToBuffer(ref, {
     meta: 'op1',
 
+    noop: noop,
+
     apply: function(snapshot) {
       snapshot.firstName = 'Tom'
     },
 
-    isCompatible: expectCall(function(op) {
-      return op.meta === 'op2';
-    }),
-
     compose: expectCall(function(op) {
+      strictEqual(op.meta, 'op2', "Composing with op2");
       return op;
-    }),
-
-    noop: function() {
-      return false;
-    }
+    })
   });
 
   deepEqual(buffer(ref), { firstName: 'Tom' }, "The operation is applied");
@@ -120,26 +121,12 @@ test("An operation can return an object from compose to replace itself with that
   applyToBuffer(ref, {
     meta: 'op2',
 
+    noop: noop,
+
     apply: function(snapshot) {
       snapshot.firstName = 'Thomas';
     }
   });
 
   deepEqual(buffer(ref), { firstName: 'Thomas' }, "The composed operation was applied");
-});
-
-test("applyToBuffer throws if the operation does not pass its test", function() {
-  var operation = {
-    apply: function(hash) {
-      hash.lastName = 'Dale';
-    },
-
-    test: function(prev) {
-      return prev.lastName === 'Dayl';
-    }
-  };
-
-  throws(function() {
-    applyToBuffer(ref, operation);
-  });
 });
