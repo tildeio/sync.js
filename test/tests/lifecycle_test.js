@@ -1,6 +1,5 @@
 import { reference, canonical, buffer, inFlight } from 'sync/reference';
 import { applyToBuffer, applyToCanonical } from 'sync/operation';
-import { SetProperty } from 'sync/operations/set_property';
 import { SetProperties } from 'sync/operations/set_properties';
 import { saving, saved } from 'sync/lifecycle';
 
@@ -126,7 +125,7 @@ test("The saving() function throws if the reference has no operations", function
 });
 
 test("The saving() function throws if the reference is already saving and unacknowledged", function() {
-  applyToBuffer(ref, new SetProperty('firstName', null, 'Thomas'));
+  applyToBuffer(ref, new SetProperties({ firstName: [ null, 'Thomas' ] }));
   saving(ref);
 
   throws(function() {
