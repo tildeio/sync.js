@@ -185,9 +185,8 @@ test("If an update to canonical makes a buffered operation a no-op, it is no lon
 
     // Once transformation is done, assert that the operation is now a noop
     noop: expectCall(function() {
-      debugger;
       return this.nooped;
-    })
+    }, 2)
   });
 
   // This should make the buffered operation a noop

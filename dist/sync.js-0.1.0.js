@@ -203,6 +203,8 @@ define("sync/operation",
     function applyToCanonical(reference, operation) {
       operation.apply(reference.canonical);
 
+      reference.trigger('canonical:change', { detail: operation });
+
       var transformed, remove, inFlightPrime, bufferPrime, changedBuffer;
       var inFlight = reference.inFlight, buffer = reference.buffer;
 
@@ -221,20 +223,16 @@ define("sync/operation",
 
           bufferPrime = result[0];
           operation = result[1];
-          changedBuffer = !bufferPrime.noop();
+          changedBuffer = !operation.noop();
 
-          reference.buffer = changedBuffer ? bufferPrime : null;
+          reference.buffer = bufferPrime.noop() ? null : bufferPrime;
         } else {
           changedBuffer = true;
         }
       }
 
-      reference.trigger('canonical:change');
-
       if (changedBuffer) {
-        reference.trigger('buffer:change');
-      } else {
-        reference.trigger('buffer:transformed');
+        reference.trigger('buffer:change', { detail: operation });
       }
     }
 
@@ -260,7 +258,7 @@ define("sync/operation",
 
       if (buffer.noop()) { reference.buffer = null; }
 
-      reference.trigger('buffer:change');
+      reference.trigger('buffer:change', { detail: operation });
     }
 
     __exports__.applyToCanonical = applyToCanonical;
