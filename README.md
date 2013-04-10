@@ -6,7 +6,7 @@ between a JavaScript client and a backend.
 It does not directly manage communication with your backend,
 instead providing an operation-based primitive that you can
 use to keep canonical and local snapshots that remain
-consistent as the backend provides udpates.
+consistent as the backend provides updates.
 
 It is explicitly designed to encapsulate transport-related
 concerns behind a single, high-fidelity abstraction based
