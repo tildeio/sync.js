@@ -73,7 +73,6 @@ define("sync/lifecycle",
       ref.awaitingAck = false;
 
       ref.trigger('lifecycle:saved');
-      ref.trigger('canonical:change');
     }
 
     __exports__.saving = saving;
