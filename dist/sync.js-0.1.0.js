@@ -203,8 +203,6 @@ define("sync/operation",
     function applyToCanonical(reference, operation) {
       operation.apply(reference.canonical);
 
-      reference.trigger('canonical:change', { detail: operation });
-
       var transformed, remove, inFlightPrime, bufferPrime, changedBuffer;
       var inFlight = reference.inFlight, buffer = reference.buffer;
 

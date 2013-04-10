@@ -10,7 +10,6 @@ var events;
 
 function resetEvents() {
   events = {
-    'canonical:change': [],
     'buffer:change': [],
     'inflight:transformed': [],
     'buffer:transformed': [],
@@ -46,10 +45,6 @@ module("Triggered Events", {
 
     resetEvents();
 
-    ref.on('canonical:change', function(e) {
-      events['canonical:change'].push(e.detail);
-    });
-
     ref.on('buffer:change', function(e) {
       events['buffer:change'].push(e.detail);
     });
@@ -72,7 +67,7 @@ module("Triggered Events", {
   }
 });
 
-test("When an operation is added to canonical, the canonical:change and buffer:change events are fired", function() {
+test("When an operation is added to canonical, the buffer:change events is fired if there is no in-flight or buffer", function() {
   var operation = {
     meta: 'op',
     apply: expectCall(),
@@ -82,8 +77,7 @@ test("When an operation is added to canonical, the canonical:change and buffer:c
   applyToCanonical(ref, operation);
 
   firedEvent('buffer:change', operation);
-  firedEvent('canonical:change', operation);
-  firedEvents('canonical:change', 'buffer:change');
+  firedEvents('buffer:change');
 });
 
 test("When an operation is added to the buffer, the buffer:change event is fired", function() {
@@ -123,7 +117,7 @@ test("When a reference is marked as saved, its lifecycle:saved event is fired", 
 
   saved(ref);
 
-  firedEvents('canonical:change', 'lifecycle:saved');
+  firedEvents('lifecycle:saved');
 });
 
 test("When an in-flight operation exists, but no buffer, the leftover part of the in-flight transform is passed to buffer:change", function() {
@@ -232,10 +226,9 @@ test("When an in-flight and buffer operations exist, and the buffered transform 
     apply: noop
   };
 
-  debugger;
   applyToCanonical(ref, op3);
 
-  firedEvents('canonical:change');
+  firedEvents(/* none */);
 });
 
 test("When a canonical is modified for a property with an operation in the buffer, its buffer:change event is not fired", function() {
@@ -292,5 +285,5 @@ test("When a canonical is modified for a property without an operation in the bu
   applyToCanonical(ref, operation);
 
   firedEvent('buffer:change', operation);
-  firedEvents('canonical:change', 'buffer:change');
+  firedEvents('buffer:change');
 });
