@@ -10,22 +10,22 @@ consistent as the backend provides udpates.
 
 It is explicitly designed to encapsulate transport-related
 concerns behind a single, high-fidelity abstraction based
-around granular operations.
+on operations.
 
 As a result, it can be used in hybrid scenarios where documents
-are transported both over REST and via an open web sockets. This
-is achieved by converting document updates via REST into
+are transported both over REST as well as via open web sockets.
+This is achieved by converting REST document updates into
 individual operations that can be applied to the canonical
-snapshot, and which the local operations can apply on top of.
+snapshot.
 
 This model also makes it straight-forward to use partial
 updates using HTTP `PATCH`, because all of the information
 about the original operations is preserved.
 
-In short, _sync.js_ is based around preserving the highest
-fidelity information about what the user is doing locally,
-which you can then use directly (using web sockets) or
-convert into a lower-fidelity transport like REST.
+In short, _sync.js_ preserves the granular operations
+performed by the user locally, and helps you save them
+directly (over web sockets) or convert them into a
+lower-fidelity transport like REST.
 
 ## Higher Level Abstractions
 
@@ -87,12 +87,12 @@ that is stored in a backend.
 
 The local reference keeps track of several things:
 
-* A snapshot of the document's known state on the backend, called
-  the **canonical snapshot**
-* A list of operations that have been sent to the backend but have
-  not yet been acknowledged.
-* A list of operations that have been applied locally, and have
-  not yet been sent to the backend.
+* A snapshot of the document's known state on the backend, called the
+  **canonical snapshot**
+* A composed operation that has been sent to the backend but has not yet
+  been acknowledged.
+* A composed operation that has been applied locally, but has not yet
+  been sent to the backend.
 
 ### Creating a New Reference
 
@@ -116,11 +116,11 @@ import { canonical } from "sync/reference";
 canonical(reference) // the canonical snapshot
 ```
 
-### Getting the Buffered Snapshot
+### Getting the Local Snapshot
 
-The buffered snapshot represents the local state. This means
-the canonical snapshot will any local operations applied on
-top.
+The local snapshot represents the local, application state, which is
+determining by applying the buffered operation on top of the canonical
+snapshot.
 
 ```javascript
 import { buffer } from "sync/reference";
@@ -130,8 +130,9 @@ buffer(reference) // the buffered snapshot
 
 ### Determining Whether a Reference is Dirty
 
-A reference is dirty if there are any outstanding operations
-either in the buffer or in-flight.
+A reference is dirty if there is an outstanding buffered operation
+or if the document has started to save but the backend hasn't yet
+acknowledged the save.
 
 ```javascript
 import { isDirty } from "sync/reference";
@@ -156,15 +157,14 @@ When you create a new reference using `reference(id)`, _sync.js_
 will initialize a new empty object as the starting point for
 your reference.
 
-The `SetProperty` operation manipulates objects, and you will
+The `SetProperties` operation manipulates objects, and you will
 use it when working with documents that represent dictionaries
 on the backend.
 
-You can optionally provide your own initial object as a starting
-point for operations. For example, if you are working with
-documents that represent sets, you will want to provide a new
-`Set` object and use `Add` and `Remove` operations to work
-with it.
+You can optionally provide a different initial object as a starting
+point for operations. If you are working with documents that represent
+sets, you will want to provide a new `Set` object as the second
+parameter to `reference` and use `SetChange` operations against it.
 
 ### Starting Out With Dictionaries
 
@@ -176,16 +176,19 @@ the canonical snapshot:
 ```javascript
 import { reference } from "sync/reference";
 import { applyToCanonical } from "sync/operation";
-import { SetProperty } from "sync/operation/set_property";
+import { SetProperties } from "sync/operations/set_properties";
 
 // assume I have a JSON document that I loaded from the server
 // that looks like this:
 //   { "id": 12, "firstName": "Tom", "lastName": "Dale" }
 var ref = reference(json.id);
+delete json.id;
 
+// Make all of the old values null
 for (var prop in json) {
-  applyToCanonical(ref, new SetProperty(prop, null, json[prop]);
+  json[prop] = [ null, json[prop] ];
 }
+applyToCanonical(ref, new SetProperties(json));
 ```
 
 When you're done, you now have a canonical snapshot that
@@ -198,13 +201,13 @@ use `applyToBuffer`:
 
 ```javascript
 import { applyToBuffer } from "sync/operation";
-import { SetProperty } from "sync/operation/set_property";
+import { SetProperties } from "sync/operations/set_properties";
 
-applyToBuffer(ref, new SetProperty('firstName', 'Tom', 'Tim');
+applyToBuffer(ref, new SetProperties({ firstName: [ null, 'Tim' ] });
 ```
 
-After `applyToBuffer` finishes, the `buffer:change` and
-`lifecycle:dirty` events will fire.
+After `applyToBuffer` finishes, the `buffer:change` event
+will fire.
 
 #### Updates from the Server
 
@@ -213,13 +216,12 @@ and the backend wants to update the `lastName` to `Dayl`.
 I would do the following:
 
 ```javascript
-applyToCanonical(ref, new SetProperty('lastName', 'Dale', 'Dayl'));
+applyToCanonical(ref, new SetProperties({ lastName: [ null, 'Dayl' ] }));
 ```
 
-This will update the canonical snapshot and trigger the
-`canonical:change` event. Because there are no local
-changes to `lastName` pending, it will also affect the
-buffered snapshot, and trigger the `buffer:change` event.
+This will update the canonical snapshot. Because there are no local
+changes to `lastName` pending, it will also affect the local
+snapshot, and trigger the `buffer:change` event.
 
 If the server had wanted to change `firstName` instead,
 its change would have updated the canonical snapshot,
@@ -239,9 +241,9 @@ saving(ref);
 
 This does two things:
 
-* Moves all outstanding operations in the buffer into
-  in-flight. This allows you to have accumulate new
-  buffered operations while waiting for the server to
+* Moves the outstanding operation in the buffer into
+  in-flight. This allows you to have accumulate a new
+  buffered operation while waiting for the server to
   respond.
 * Triggers the `lifecycle:saving` event.
 
@@ -257,11 +259,10 @@ import { saved } from "sync/lifecycle";
 saved(ref);
 ```
 
-This does three things:
+This does two things:
 
 * Applies all in-flight operations to the canonical
   snapshot
-* Triggers the `canonical:change` event
 * Triggers the `lifecycle:saved` event
 
 At this point, you can save the next batch of operation
@@ -284,9 +285,9 @@ in-flight operations so they apply cleanly on top:
 
 ```javascript
 import { applyToCanonical } from "sync/operation";
-import { SetProperty } from "sync/operations/set_property";
+import { SetProperties } from "sync/operations/set_properties";
 
-applyToCanonical(ref, new SetProperty('firstName', 'Tom', 'Tim'));
+applyToCanonical(ref, new SetProperties({ firstName: [ 'Tom', 'Tim' ] }));
 ```
 
 By default, _sync.js_ assumes that your server will use a
@@ -294,7 +295,7 @@ last-write-wins strategy for resolving conflicts, and
 applies the same strategy locally.
 
 If you want a different strategy, you can create your
-own version of _SetProperty_ that has a different
+own version of _SetProperties_ that has a different
 implementation of its _transform_ method. See below
 for more information.
 
@@ -305,28 +306,26 @@ with dictionaries.
 
 The primary difference is that you will instantiate the
 reference using a `Set` as its initial snapshot and make
-changes to the reference using the `Add` and `Remove`
-operations instead of the `SetProperty` operation.
+changes to the reference using the `SetChange` operation
+instead of the `SetProperties` operation.
 
 ```javascript
 import { Set } from "sync/modules/set";
 import { reference } from "sync/reference";
 import { applyToBuffer, applyToCanonical } from "sync/operation";
-import { Add, Remove } from "sync/operations/set";
+import { SetChange } from "sync/operations/set_change";
 
 // Assume I have a JSON document that has an ID and an array
 // of numbers that represent a set
 var set = new Set();
 var ref = reference(json.id, set);
 
-json.list.forEach(function(item) {
-  applyToCanonical(ref, new Add(item));
-});
+applyToCanonical(ref, new SetChange({ add: new Set(list) }));
 ```
 
 If the backend provides updates, you apply them to the
 canonical as described above for dictionaries. Because
-`Add` and `Remove` implement the interface for operations,
+`SetChange` implements the interface for operations,
 _sync.js_ knows how to deal with:
 
 * keeping the local buffer up to date with backend
@@ -338,45 +337,39 @@ _sync.js_ knows how to deal with:
 
 #### Conflict Resolution Strategy
 
-If there is a local `Add` to a set, that means that the
-backend does not have the item in its set. If the
-backend presents an `Add` operation while the same
-`Add` operation is in the buffer or in-flight, the
-local operation can be safely discarded.
+If there is a local add to a set, that means that the backend does not
+have the item in its set. If the backend presents an `SetChange` operation
+containing an add that is already in the buffer or in-flight, the local
+component can be safely discarded.
 
-The same is true for `Remove` operations.
+The same is true for remove components.
 
 #### Usage for Relationship
 
-Sets can be used to represent relationships between
-references on the backend.
+Sets can be used to represent relationships between references on the
+backend.
 
-For example, if you have a post that has many comments,
-the relationship could be represented by a set of
-comment ids.
+For example, if you have a post that has many comments, the relationship
+could be represented by a set of comment ids.
 
-Adding a comment to a post adds its ID to the set,
-and removing a comment from a post removes its ID
-from the set.
+Adding a comment to a post adds its ID to the set, and removing a
+comment from a post removes its ID from the set.
 
-If your backend requires you to make changes to both
-attributes and relationships in the same request,
-you will want a model or record abstraction that
-allows you to keep track of the various _sync.js_
+If your backend requires you to make changes to both attributes and
+relationships in the same request, you will want a model or record
+abstraction that allows you to keep track of the various _sync.js_
 references in a single place and update them together.
 
-The benefit of using a separate reference for these
-relationships is twofold:
+The benefit of using a separate reference for these relationships is
+twofold:
 
-* It keeps the truth of the relationship in a single
-  place, instead of needing to keep it in sync
-  in all of the records it touches. You can always
-  determine the state for each record based on a
-  single source of truth.
-* It provides flexibility in how you want to save
-  the relationships to the backend in a relatively
-  simple way without making too many assumptions
-  about how that will work.
+* It keeps the truth of the relationship in a single place, instead of
+  needing to keep it in sync in all of the records it touches. You can
+  always determine the state for each record based on a single source of
+  truth.
+* It provides flexibility in how you want to save the relationships to
+  the backend in a relatively simple way without making too many
+  assumptions about how that will work.
 
 ## Operations
 
@@ -387,97 +380,78 @@ Each operation is required to implement a number of methods. In
 general, you will use one of the built-in operations, but it may
 be useful to know how an operation works.
 
-### toString()
+### toString() => String
 
 A useful representation of the operation that can be used for
 debugging.
 
-### apply(snapshot)
+### apply(snapshot) => void
 
-This method takes a local snapshot and applies the change to it.
-The snapshot may represent the canonical state on the server or
-the local, not-yet-saved state.
+This method takes a local snapshot and applies the change to it.  The
+snapshot may represent the canonical state on the server or the local,
+not-yet-saved state.
 
-The `SetProperty` operation works with an `Object` snapshot, while
-the `Add` and `Remove` operations work with a `Set` snapshot.
+The `SetProperties` operation works with an `Object` snapshot, while the
+`SetChange` operations work with a `Set` snapshot.
 
-### isCompatible(Operation)
+### transform(Operation) => [ Operation, Operation ]
 
-This method takes another operation and returns whether it is
-"compatible" with the other operation.
+This method is called when a local operation has been pre-empted by a
+change supplied by the backend.
 
-An operation should return true from this method if it is
-capable of transforming against the other operation or composing
-with the other operation.
+It is responsible for returning two operations:
 
-### transform(Operation)
-
-This method is called when a local operation has been pre-empted
-by a change supplied by the backend.
-
-It will only be called if the `isCompatible` method has already
-returned true, and it is responsible for updating itself to
-reflect the changes to the canonical state.
+1. An operation that represents a version of itself that still needs to
+   be applied on the backend side.
+2. An operation that represents a verion of the backend operation that
+   still needs to be applied locally.
 
 For example:
 
 * The canonical, backend state for a record is
   `{ firstName: 'Tom', lastName: 'Dale' }`
-* I create a local `SetProperty` operation to update the
-  `firstName` to `Thomas` (`SetProperty[firstName Tom->Thomas`)
+* I create a local `SetProperties` operation to update the
+  `firstName` to `Thomas` (`SetProperties[firstName null->Thomas]`)
 * In the meantime, the backend provides an operation:
-  `SetProperty[firstName Tom->Tim]`
-* The local operation is responsible for transforming itself
-  to reflect the new canonical state to
-  `SetProperty[firstName Tim->Thomas]`
+  `SetProperties[firstName null->Tim]`
+* The transform method will return two transformed operations:
+    * `SetProperties[firstName Tim->Thomas]`. Because the server
+      operation came first, the old value of the `firstName`
+      component is updated.
+    * `SetProperties[]`. Because the server operation came first,
+      there is no version of the backend operation that needs to
+      be applied to the local snapshot to bring it up to date.
 
-An operation's `transform` method should update itself without 
-requiring any input from the user.
+Note that this method is crucial for the proper functioning of
+the entire system. The return value from this function is used
+to determine what operation needs to be applied to local
+snapshots, which keeps synchronization cheap.
 
-The reason that this transformation is required even in a
-destructive operation like `SetProperty` is shown in the
-following example:
+You can look at the `transform` methods in `SetProperties` and
+`SetChange` to get an idea of how to implement this method.
 
-* The canonical, backend state for a reference is
-  `{ firstName: 'Tom', lastName: 'Dale' }`
-* I create a local `SetProperty` operation to update the
-  `firstName` to `Thomas` (`SetProperty[firstName Tom->Thomas`)
-* In the meantime, the backend provides an operation:
-  `SetProperty[firstName Tom->Thomas]`
-* The local operation is responsible for transforming itself
-  to reflect the new canonical state to
-  `SetProperty[firstName Thomas->Thomas]`
+### compose(Operation) => Operation
 
-Because the operation is now a noop, _sync.js_ can safely
-discard it. This means that the reference will trigger a
-`lifecycle:clean` event and no longer return true when
-passed to `isDirty` (if this was the last operation left
-in the buffer).
-
-### compose(Operation)
-
-The `compose` method combines two compatible operations
-that have not yet been sent to the backend into a single
-operation.
+The `compose` method combines two operations into a single operation.
 
 For example:
 
 * The canonical state for a reference is
   `{ firstName: 'Tom', lastName: 'Dale' }`
-* I create a local `SetProperty` operation to update the
-  `firstName` to `Thomas` (`SetProperty[firstName Tom->Thomas]`)
-* Before saving the reference, I create a new `SetProperty`
+* I create a local `SetProperies` operation to update the
+  `firstName` to `Thomas` (`SetProperties[firstName Tom->Thomas]`)
+* Before saving the reference, I create a new `SetProperties`
   operation to update the `firstName` to `Tim`
-  (`SetProperty[firstName Thomas->Tim]`).
-* The `compose` method will update the first `SetProperty`
+  (`SetProperties[firstName Thomas->Tim]`).
+* The `compose` method will update the first `SetProperties`
   operation to combine them into a single operation
-  (`SetProperty[firstName Tom->Tim]`)
+  (`SetProperties[firstName Tom->Tim]`)
 
 If the operation becomes a noop (if the user makes a
 change and then undoes it before saving), _sync.js_ will
 discard the operation.
 
-### noop()
+### noop() => Boolean
 
 The `noop` method returns true if applying the operation
 has no effect. A no-op operation can be safely discarded.
@@ -492,15 +466,9 @@ As you apply operations to a reference, _sync.js_ will
 trigger events on the reference when certain important
 changes occur.
 
-### canonical:change
-
-This event is triggered whenever the backend updates
-the canonical representation.
-
 ### buffer:change
 
-This event is triggered whenever the buffered snapshot
-is changed.
+This event is triggered whenever the local snapshot changes.
 
 This happens when:
 
@@ -508,73 +476,51 @@ This happens when:
 * the backend updates the canonical representation,
   and that affects the buffered snapshot.
 
-Note that this event is only triggered if the buffered
-snapshot actually changes. In the following example,
-this `buffer:change` would not fire.
+Note that this event is only triggered if the buffered snapshot actually
+changes. In the following example, this `buffer:change` would not fire.
 
-* The initial canonical state is
-  `{ firstName: 'Tom', lastName: 'Dale' }`
-* A local operation (`SetProperty[firstName Tom->Tim]`)
-  is applied. The buffered snapshot is now
-  `{ firstName: 'Tim', lastName: 'Dale' }`
+* The initial canonical state is `{ firstName: 'Tom', lastName: 'Dale' }`
+* A local operation (`SetProperties[firstName Tom->Tim]`) is applied. The
+  buffered snapshot is now `{ firstName: 'Tim', lastName: 'Dale' }`
 * The backend sends this update:
-  `SetProperty[firstName Tom->Thomas]`.
+  `SetProperties[firstName Tom->Thomas]`.
 
-After applying the local operation on top of the new
-canonical state, the buffered snapshot is still
-`{ firstName: 'Tim', lastName: 'Dale' }`. As a result,
-`buffer:change` is not fired.
+After applying the local operation on top of the new canonical state,
+the buffered snapshot is still `{ firstName: 'Tim', lastName: 'Dale' }`.
+As a result, `buffer:change` is not fired.
 
 ### lifecycle:saving
 
 This event is triggered when you call `save(reference)`.
 
-Saving a reference moves all of its buffered operations
-into an in-flight bucket, allowing the user to continue
-making local changes.
+Saving a reference moves all of its buffered operations into an
+in-flight bucket, allowing the user to continue making local changes.
 
-Users of _sync.js_ are expected to persist those changes
-to their backend and call `saved(reference)` when their
-backend has acknowledged the change.
+Users of _sync.js_ are expected to persist those changes to their
+backend and call `saved(reference)` when their backend has acknowledged
+the change.
 
 ### lifecycle:saved
 
 This event is triggered when you call `saved(reference)`.
 
-This applies all of the operations in the in-flight
-bucket to the canonical snapshot.
+This applies all of the operations in the in-flight bucket to the
+canonical snapshot.
 
-If the server has provided other updates in its
-response, they should be applied directly to the
-canonical snapshot using `applyToCanonical`.
-
-### lifecycle:clean
-
-This event is triggered when there are no longer any
-local operations in the buffer.
-
-This could happen because they were moved to the
-in-flight bucket, or because the last operation in
-the buffer got converted into a noop.
-
-### lifecycle:dirty
-
-This event is triggered when the first operation is
-added to the buffer.
+If the server has provided other updates in its response, they should be
+applied directly to the canonical snapshot using `applyToCanonical`.
 
 ## Extracted from Ember Data
 
-The idea for _sync.js_ came from our work on Ember
-Data, where we spent a lot of time trying to
-reverse engineer what exactly some particular
-response from the server actually meant in terms
-of the local models.
+The idea for _sync.js_ came from our work on Ember Data, where we spent
+a lot of time trying to reverse engineer what exactly some particular
+response from the server actually meant in terms of the local models.
 
-We ended up making decisions for how to apply the
-changes on a mostly ad-hoc basis, which led to
-inconsistencies and an overly complex model.
+We ended up making decisions for how to apply the changes on a mostly
+ad-hoc basis, which led to inconsistencies and an overly complex model.
 
-Our goal with _sync.js_ is to define a clear,
-comprehensible model for all stages of the lifecycle
-of a local reference, making it clear how to deal
-with server changes that happen at any point
+Our goal with _sync.js_ is to define a clear, comprehensible model for
+all stages of the lifecycle of a local reference, making it clear how to
+deal with server changes that happen at any point: when the record is
+totally clean, when there are local changes, when there are in-flight
+changes, or when there are both local and in-flight changes.
