@@ -71,7 +71,7 @@ test("When an operation is added to canonical, the buffer:change events is fired
   var operation = {
     meta: 'op',
     apply: expectCall(),
-    noop: expectCall()
+    noop: expectCall(function() {}, 2)
   };
 
   applyToCanonical(ref, operation);
@@ -273,7 +273,7 @@ test("When a canonical is modified for a property with an operation in the buffe
       deepEqual(snapshot, {}, "The snapshot is empty so far");
     }),
 
-    noop: expectCall()
+    noop: expectCall(noop, 2)
   });
 });
 

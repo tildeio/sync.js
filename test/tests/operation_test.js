@@ -1,19 +1,33 @@
 import { expectCall } from "test_helpers";
 import { applyToCanonical, applyToBuffer } from "sync/operation";
-import { reference, canonical, buffer } from "sync/reference";
+import { reference, canonical, buffer, canonicalOp } from "sync/reference";
 
 function Type() {}
 
-var noop = function() { }, ref;
+var noop = function() { }, ref, operation, composedOp;
 
 module("Operation", {
   setup: function() {
     ref = reference(Type, '1');
 
-    var operation = {
+    composedOp = {
+      noop: function() { return false; },
+      compose: function() { return this; }
+    };
+
+    var noopOp = {
+      noop: function() { return true; }
+    };
+
+    operation = {
       noop: function() { return false; },
       apply: function(hash) {
         hash.firstName = 'Tom';
+      },
+
+      compose: function(other) {
+        if (other.meta === 'nooper') { return noopOp; }
+        return composedOp;
       }
     }
 
@@ -23,6 +37,28 @@ module("Operation", {
 
 test("applyToCanonical(reference, operation) updates the canonical snapshot", function() {
   deepEqual(canonical(ref), { firstName: 'Tom' });
+});
+
+test("applyToCanonical(reference, operation) initializes the canonical operation", function() {
+  deepEqual(canonicalOp(ref), operation, "The first operation becomes the canonical op");
+});
+
+test("applyToCanonical(reference, operation) updates an existing canonical operation", function() {
+  applyToCanonical(ref, {
+    meta: 'op2',
+    noop: function() { return false; },
+    apply: function() {}
+  });
+  deepEqual(canonicalOp(ref), composedOp, "The composed op becomes the canonical op");
+});
+
+test("applyToCanonical(reference, operation) nulls out the canonical operation when it's a noop", function() {
+  applyToCanonical(ref, {
+    meta: 'nooper',
+    noop: function() { return false; },
+    apply: function() {}
+  });
+  deepEqual(canonicalOp(ref), null, "The composed op becomes null");
 });
 
 test("applied operations apply to the buffered snaphot", function() {

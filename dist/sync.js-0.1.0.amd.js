@@ -163,6 +163,8 @@ define("sync/operation",
 
 
     function applyToCanonical(reference, operation) {
+      reference.canonicalOp = compose(reference.canonicalOp, operation);
+
       operation.apply(reference.canonical);
 
       var transformed, remove, inFlightPrime, bufferPrime, changedBuffer;
@@ -196,28 +198,21 @@ define("sync/operation",
       }
     }
 
-    function compose(op1, op2) {
-      if (op1.isCompatible(op2)) {
-        var composed = op1.compose(op2);
-        if (typeof composed === 'object') { return composed; }
-        if (op1.noop()) { return 'noop'; }
-        return true;
+    function compose(existing, op) {
+      var composed;
+
+      if (existing) {
+        composed = existing.compose(op);
+      } else {
+        composed = op;
       }
 
-      return false;
+      if (composed.noop()) { return null; }
+      return composed;
     }
 
     function applyToBuffer(reference, operation) {
-      var buffer = reference.buffer;
-
-      if (buffer) {
-        buffer = reference.buffer = buffer.compose(operation);
-      } else {
-        buffer = reference.buffer = operation;
-      }
-
-      if (buffer.noop()) { reference.buffer = null; }
-
+      reference.buffer = compose(reference.buffer, operation);
       reference.trigger('buffer:change', { detail: operation });
     }
 
@@ -460,6 +455,10 @@ define("sync/reference",
       return reference.canonical;
     }
 
+    function canonicalOp(reference) {
+      return reference.canonicalOp;
+    }
+
     function inFlight(reference) {
       var snapshot = copy(reference.canonical),
           inFlight = reference.inFlight;
@@ -488,6 +487,7 @@ define("sync/reference",
 
     __exports__.reference = reference;
     __exports__.canonical = canonical;
+    __exports__.canonicalOp = canonicalOp;
     __exports__.inFlight = inFlight;
     __exports__.buffer = buffer;
     __exports__.isDirty = isDirty;
