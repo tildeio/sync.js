@@ -12,8 +12,7 @@ module.exports = function(grunt) {
     concat: config('concat'),
     browser: config('browser'),
     connect: config('connect'),
-    transpile: config('transpile'),
-    buildTests: config('build_tests')
+    transpile: config('transpile')
   });
 
   // By default, (i.e., if you invoke `grunt` without arguments), do
@@ -32,8 +31,7 @@ module.exports = function(grunt) {
   this.registerTask('tests', "Builds the test package", [
                     'build',
                     'concat:deps',
-                    'transpile:tests',
-                    'buildTests:dist']);
+                    'transpile:tests']);
 
   // Run a server. This is ideal for running the QUnit tests in the browser.
   this.registerTask('server', [
@@ -49,5 +47,4 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-watch');
 
   grunt.task.loadTasks('tasks');
-
 };
