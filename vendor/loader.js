@@ -8,7 +8,7 @@ var define, requireModule;
   };
 
   define.registry = registry;
-  define.seend = seen;
+  define.seen = seen;
 
   requireModule = function(name) {
     if (seen[name]) { return seen[name]; }
