@@ -1,4 +1,0 @@
-(function(globals) {
-
-window.sync = requireModule("sync");
-})(window);
