@@ -3,12 +3,19 @@
 <head>
   <meta charset="utf-8">
   <title>QUnit Example</title>
-  <link rel="stylesheet" href="lib/qunit-1.11.0.css">
+  <link rel="stylesheet" href="lib/qunit-1.12.0.css">
 </head>
 <body>
   <div id="qunit"></div>
   <div id="qunit-fixture"></div>
-  <script src="lib/qunit-1.11.0.js"></script>
+  <script src="/vendor/loader.js"></script>
+  <script src="lib/qunit-1.12.0.js"></script>
   <script src="/tmp/tests.js"></script>
+
+  <script>
+    Object.keys(define.registry).filter(function(name){
+      return /^tests\//.test(name)
+    }).forEach(requireModule);
+  </script>
 </body>
 </html>
